@@ -632,6 +632,21 @@ textarea {
   color: var(--green);
 }
 
+.chip.is-active {
+  border-color: var(--green);
+  color: var(--green);
+  background: rgb(182 255 56 / 0.08);
+}
+
+.trick-row {
+  margin-top: 8px;
+}
+
+.chip-trick {
+  border-style: dashed;
+  border-color: rgb(155 92 255 / 0.55);
+}
+
 .window-bar {
   display: flex;
   align-items: center;

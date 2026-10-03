@@ -1,8 +1,8 @@
 'use client';
 
 import { useId, type CSSProperties, type ReactNode } from 'react';
-import { Fish, Mug, PhoneProp, PixelLogo, PROP_PLAY, PropArt, type PlayStyle } from './props';
-import type { PetExpression, PetProp, PetState } from './types';
+import { Fish, Mug, PhoneProp, PixelLogo, PropArt, placeFor, type PropLayer } from './props';
+import type { PetExpression, PetProp, PetState, PetTrick } from './types';
 
 /** Paleta z arkusza postaci. */
 export const PET_COLORS = {
@@ -48,20 +48,6 @@ const STAR = starPath(6.5, 2.8);
 
 const EYE = { l: { x: 61, y: 107 }, r: { x: 99, y: 107 } } as const;
 const TILT = { l: -8, r: 8 } as const;
-
-/** Gdzie i jak trzymany jest rekwizyt przy danym stylu zabawy. */
-const PROP_POSE: Record<Exclude<PlayStyle, 'sip'>, { x: number; y: number; dx?: number; dy?: number; s: number; mid?: boolean }> = {
-  toss: { x: 80, y: 150, s: 0.85 },
-  spin: { x: 116, y: 116, dy: -22, s: 0.72 },
-  wave: { x: 114, y: 120, dy: -24, s: 0.72 },
-  phone: { x: 66, y: 146, s: 0.98, mid: true },
-  bounce: { x: 80, y: 28, s: 0.9 },
-  drum: { x: 80, y: 168, s: 0.82 },
-  rotate: { x: 80, y: 152, s: 0.85 },
-  squirm: { x: 80, y: 150, s: 0.9 },
-  hug: { x: 80, y: 152, s: 0.9 },
-  type: { x: 80, y: 158, s: 0.85 },
-};
 
 type Side = 'l' | 'r';
 type Pt = [number, number];
@@ -185,60 +171,84 @@ function Face({ expression, color, ids }: { expression: PetExpression; color: st
   const frown = <path d="M 74.5 126 Q 80 121 85.5 126" {...line} strokeWidth={2.2} />;
   const flat = <path d="M 75 124 L 85 124" {...line} strokeWidth={2.2} />;
 
+  let parts: [ReactNode, ReactNode, ReactNode];
   switch (expression) {
     case 'happy':
-      return <>{arc('l')}{arc('r')}{open}</>;
+      parts = [arc('l'), arc('r'), open];
+      break;
     case 'excited':
-      return <>{chevron('l')}{chevron('r')}{open}</>;
+      parts = [chevron('l'), chevron('r'), open];
+      break;
     case 'dizzy':
-      return <>{chevron('l')}{chevron('r')}{squiggle}</>;
+      parts = [chevron('l'), chevron('r'), squiggle];
+      break;
     case 'wink':
-      return <>{oval('l')}{arc('r')}{open}</>;
+      parts = [oval('l'), arc('r'), open];
+      break;
     case 'sad':
-      return <>{lid('l', -3, -12)}{lid('r', -12, -3)}{frown}</>;
+      parts = [lid('l', -3, -12), lid('r', -12, -3), frown];
+      break;
     case 'curious':
-      return <>{oval('l', 9, 14)}{oval('r', 11.5, 17, -1)}{o(2.2, 2.6)}</>;
+      parts = [oval('l', 9, 14), oval('r', 11.5, 17, -1), o(2.2, 2.6)];
+      break;
     case 'confused':
-      return <>{oval('l')}{arc('r')}{squiggle}</>;
+      parts = [oval('l'), arc('r'), squiggle];
+      break;
     case 'annoyed':
-      return <>{lid('l', -5, -1)}{lid('r', -1, -5)}{flat}</>;
+      parts = [lid('l', -5, -1), lid('r', -1, -5), flat];
+      break;
     case 'angry':
-      return <>{lid('l', -14, -1)}{lid('r', -1, -14)}{frown}</>;
+      parts = [lid('l', -14, -1), lid('r', -1, -14), frown];
+      break;
     case 'hacker':
-      return <>{lid('l', -12, 0, 'below', 10, 13)}{lid('r', 0, -12, 'below', 10, 13)}{smirk}</>;
+      parts = [lid('l', -12, 0, 'below', 10, 13), lid('r', 0, -12, 'below', 10, 13), smirk];
+      break;
     case 'focused':
-      return (
-        <>
-          {chevron('l')}
-          <rect className="pet-caret" x={EYE.r.x - 9} y={EYE.r.y + 4} width={18} height={5.5} rx={2.6} fill={color} filter={glow} />
-        </>
-      );
+      parts = [
+        chevron('l'),
+        <rect className="pet-caret" x={EYE.r.x - 9} y={EYE.r.y + 4} width={18} height={5.5} rx={2.6} fill={color} filter={glow} />,
+        null,
+      ];
+      break;
     case 'surprised':
-      return <>{oval('l', 11, 15, -1)}{oval('r', 11, 15, -1)}{o(3, 4)}</>;
+      parts = [oval('l', 11, 15, -1), oval('r', 11, 15, -1), o(3, 4)];
+      break;
     case 'shocked':
-      return <>{oval('l', 12.5, 13.5)}{oval('r', 12.5, 13.5)}{open}</>;
+      parts = [oval('l', 12.5, 13.5), oval('r', 12.5, 13.5), open];
+      break;
     case 'sleepy':
-      return <>{lid('l', 2, 2)}{lid('r', 2, 2)}{dot}</>;
+      parts = [lid('l', 2, 2), lid('r', 2, 2), dot];
+      break;
     case 'asleep':
-      return <>{arc('l', true)}{arc('r', true)}{dot}</>;
+      parts = [arc('l', true), arc('r', true), dot];
+      break;
     case 'content':
-      return <>{lid('l', 3, 3, 'above', 10, 10)}{lid('r', 3, 3, 'above', 10, 10)}{open}</>;
+      parts = [lid('l', 3, 3, 'above', 10, 10), lid('r', 3, 3, 'above', 10, 10), open];
+      break;
     case 'love':
-      return <>{heart('l')}{heart('r')}{open}</>;
+      parts = [heart('l'), heart('r'), open];
+      break;
     case 'neutral':
     default:
-      return <>{oval('l')}{oval('r')}{dot}</>;
+      parts = [oval('l'), oval('r'), dot];
   }
+  return (
+    <>
+      <g className="pet-eye pet-eye--l">{parts[0]}</g>
+      <g className="pet-eye pet-eye--r">{parts[1]}</g>
+      <g className="pet-mouth">{parts[2]}</g>
+    </>
+  );
 }
 
 // ───────────────────────── części ciała ─────────────────────────
 
-function Ear({ side, ids, rim }: { side: Side; ids: Ids; rim: string }) {
+function Ear({ side, ids, rim, layer }: { side: Side; ids: Ids; rim: string; layer?: 'a' | 'b' }) {
   const left = side === 'l';
   const accent = left ? C.green : C.purple;
   return (
-    <g className={`pet-earpos pet-earpos--${side}`}>
-      <g className={`pet-ear pet-ear--${side}`}>
+    <g className={`pet-earpos pet-earpos--${side}${layer ? ` pet-earpos--${side}${layer}` : ''}`}>
+      <g className={`pet-ear pet-ear--${side}`} data-j={`ear-${side}`}>
         <g transform={left ? 'scale(-0.92 0.92)' : 'scale(0.92)'}>
           <path d={EAR} fill={`url(#${ids.skin})`} stroke={C.outline} strokeWidth={OUTLINE / 0.92} strokeLinejoin="round" paintOrder="stroke" />
           <g clipPath={`url(#${ids.earClip})`}>
@@ -269,11 +279,11 @@ function Ear({ side, ids, rim }: { side: Side; ids: Ids; rim: string }) {
   );
 }
 
-function Leg({ side, ids }: { side: Side; ids: Ids }) {
+function Leg({ side, ids, layer }: { side: Side; ids: Ids; layer?: 'a' | 'b' }) {
   const left = side === 'l';
   return (
-    <g className={`pet-legpos pet-legpos--${side}`}>
-      <g className={`pet-leg pet-leg--${side}`}>
+    <g className={`pet-legpos pet-legpos--${side}${layer ? ` pet-legpos--${side}${layer}` : ''}`}>
+      <g className={`pet-leg pet-leg--${side}`} data-j={`leg-${side}`}>
         <Shape d={left ? FOOT_L : FOOT_R} fill={`url(#${ids.skin})`} />
         <path
           d={left ? 'M -14 19.5 C -9 22.8 4 22.8 9 19.5' : 'M 14 19.5 C 9 22.8 -4 22.8 -9 19.5'}
@@ -292,12 +302,12 @@ function Leg({ side, ids }: { side: Side; ids: Ids }) {
   );
 }
 
-function Arm({ side, ids }: { side: Side; ids: Ids }) {
+function Arm({ side, ids, layer }: { side: Side; ids: Ids; layer: 'back' | 'front' }) {
   const left = side === 'l';
   const k = left ? 1 : -1;
   return (
-    <g className={`pet-armpos pet-armpos--${side}`}>
-      <g className={`pet-arm pet-arm--${side}`}>
+    <g className={`pet-armpos pet-armpos--${side} pet-armpos--${layer}`}>
+      <g className={`pet-arm pet-arm--${side}`} data-j={`arm-${side}`}>
         <Shape d={left ? SLEEVE_L : SLEEVE_R} fill={`url(#${ids.fabric})`} outline={4.6} />
         <path d={`M ${-10 * k} 0 C ${-12 * k} 5 ${-12 * k} 9 ${-11 * k} 12`} fill="none" stroke="#fff" strokeOpacity={0.12} strokeWidth={2} strokeLinecap="round" />
         <path d={`M ${-5 * k} 3 C ${-6 * k} 7 ${-6 * k} 10 ${-5.5 * k} 13`} fill="none" stroke="#000" strokeOpacity={0.4} strokeWidth={1.1} />
@@ -327,7 +337,7 @@ function Arm({ side, ids }: { side: Side; ids: Ids }) {
 function Tail({ ids, cls }: { ids: Ids; cls: string }) {
   return (
     <g className={`pet-tail ${cls}`}>
-      <g filter={`url(#${ids.neon})`}>
+      <g filter={`url(#${ids.neon})`} data-j="tail">
         <rect x={-6} y={-6} width={10} height={10} rx={1.2} fill={C.green} />
         <rect x={3} y={-13} width={7} height={7} rx={0.8} fill={C.purple} />
         <rect x={4} y={-2} width={5} height={5} fill={C.green} opacity={0.75} />
@@ -350,6 +360,10 @@ function Torso({ ids, rim }: { ids: Ids; rim: string }) {
         return <path key={i} d={`M ${x} ${172 + bow * 5.2} l 0 5.6`} stroke="#2a2a33" strokeWidth={0.9} />;
       })}
       <path d="M 46 171 Q 80 183.4 114 171" fill="none" stroke={C.green} strokeOpacity={0.55} strokeWidth={1.2} filter={`url(#${ids.neon})`} />
+      <g className="pet-backprint">
+        <path d="M 80 130 L 80 172" stroke="#000" strokeOpacity={0.35} strokeWidth={1.2} />
+        <path d="M 52 146 Q 80 152 108 146" fill="none" stroke="#000" strokeOpacity={0.3} strokeWidth={1.2} />
+      </g>
       <g className="pet-front">
         <path d={POCKET} fill="#16161b" stroke="#08080a" strokeWidth={1.6} strokeLinejoin="round" />
         <path d="M 59.5 153.3 Q 80 149.6 100.5 153.3 L 104 166 Q 80 169.6 56 166 Z" fill="none" stroke="#34343e" strokeWidth={0.9} strokeDasharray="2 1.6" />
@@ -367,7 +381,7 @@ function Torso({ ids, rim }: { ids: Ids; rim: string }) {
 }
 
 /** Kaptur z twarzą w środku. Twarz i otwór przesuwają się przy obrocie, z tyłu widać nadruk. */
-function Hood({ ids, rim, children, hack }: { ids: Ids; rim: string; children: ReactNode; hack: boolean }) {
+function Hood({ ids, rim, children, hack, headProp }: { ids: Ids; rim: string; children: ReactNode; hack: boolean; headProp?: ReactNode }) {
   return (
     <g className="pet-hood">
       <Shape d={HOOD} fill={`url(#${ids.hood})`} rim={rim} />
@@ -375,13 +389,14 @@ function Hood({ ids, rim, children, hack }: { ids: Ids; rim: string; children: R
       <path d="M 38 84 C 44 68 58 56 76 53" fill="none" stroke="#fff" strokeOpacity={0.16} strokeWidth={3.4} strokeLinecap="round" />
       <path d="M 44 62 C 33 80 30 99 33 119 M 116 62 C 127 80 130 99 127 119" fill="none" stroke="#000" strokeOpacity={0.35} strokeWidth={1.6} />
       <g className="pet-backprint">
-        <path d="M 80 52 L 80 140" stroke="#000" strokeOpacity={0.45} strokeWidth={1.4} />
-        <path d="M 82.5 54 L 82.5 138" stroke="#3a3a44" strokeWidth={0.8} strokeDasharray="1.8 1.8" />
-        <g transform="translate(80 100) scale(1.9)">
-          <PixelLogo neon={`url(#${ids.neon})`} />
-        </g>
-        <rect x={98} y={112} width={4} height={4} fill={C.purple} filter={`url(#${ids.neon})`} />
-        <rect x={56} y={86} width={3} height={3} fill={C.green} opacity={0.7} />
+        <path d="M 80 51 C 81 80 81 112 80 146" fill="none" stroke="#000" strokeOpacity={0.5} strokeWidth={1.5} />
+        <path d="M 83 53 C 84 80 84 112 83 144" fill="none" stroke="#3a3a44" strokeWidth={0.8} strokeDasharray="1.8 1.8" />
+        <path d="M 54 60 C 46 86 46 116 56 141 M 106 60 C 114 86 114 116 104 141" fill="none" stroke="#000" strokeOpacity={0.3} strokeWidth={1.3} />
+        <path d="M 30 126 C 48 146 112 146 130 126" fill="none" stroke="#000" strokeOpacity={0.45} strokeWidth={2} />
+        <path d="M 60 72 C 64 66 72 63 78 62" fill="none" stroke="#fff" strokeOpacity={0.12} strokeWidth={3} strokeLinecap="round" />
+        <rect x={74} y={128} width={12} height={7} rx={1.5} fill="#0f0f13" stroke="#2c2c35" strokeWidth={0.8} />
+        <rect x={77} y={130.5} width={2} height={2} fill={C.green} filter={`url(#${ids.neon})`} />
+        <rect x={81} y={130.5} width={2} height={2} fill={C.purple} filter={`url(#${ids.neon})`} />
       </g>
       <g className="pet-face">
         <path d={OPENING} fill="none" stroke="#000" strokeOpacity={0.55} strokeWidth={8} />
@@ -390,10 +405,13 @@ function Hood({ ids, rim, children, hack }: { ids: Ids; rim: string; children: R
         <path d={OPENING} fill={`url(#${ids.skin})`} />
         <path d="M 37 104 C 42 86 58 78 80 78 C 102 78 118 86 123 104 C 112 92 98 87 80 87 C 62 87 48 92 37 104 Z" fill="#000" opacity={0.5} />
         <path d="M 46 98 C 51 89 60 85 70 84" fill="none" stroke="#fff" strokeOpacity={0.2} strokeWidth={2.6} strokeLinecap="round" />
-        {children}
+      </g>
+      <g className="pet-face3d">{children}</g>
+      <g className="pet-face">
         {hack && <path d={OPENING} fill={`url(#${ids.shade})`} />}
         <path d={OPENING} fill="none" stroke={`url(#${ids.rim})`} strokeWidth={1.8} filter={`url(#${ids.neon})`} />
       </g>
+      {headProp}
     </g>
   );
 }
@@ -522,15 +540,39 @@ function Fx({ state, ids }: { state: PetState; ids: Ids }) {
       return (
         <g className="pet-fx">
           {[0, 1, 2].map((i) => (
-            <text key={i} x={108 + i * 11} y={100 - i * 17} className="pet-z" style={{ animationDelay: `${i * 0.8}s` }} fill={C.green} filter={neon} fontSize={14 + i * 5}>
+            <text key={i} x={92 + i * 12} y={110 - i * 18} className="pet-z" style={{ animationDelay: `${i * 0.8}s` }} fill={C.green} filter={neon} fontSize={14 + i * 5}>
               z
             </text>
           ))}
         </g>
       );
+    case 'dance':
+      return (
+        <g className="pet-fx">
+          {[
+            [20, 70, 0],
+            [140, 50, 0.6],
+            [130, 100, 1.1],
+          ].map(([x, y, d], i) => (
+            <text key={i} x={x} y={y} className="pet-note" style={{ animationDelay: `${d}s` }} fill={i === 1 ? C.purple : C.green} filter={neon} fontSize={18}>
+              {i === 1 ? '♫' : '♪'}
+            </text>
+          ))}
+        </g>
+      );
+    case 'roll':
+      return (
+        <g className="pet-fx">
+          <g className="pet-dust">
+            <circle cx={50} cy={184} r={4} fill="#8d8c99" opacity={0.35} />
+            <circle cx={40} cy={180} r={3} fill="#8d8c99" opacity={0.25} />
+            <circle cx={110} cy={184} r={4} fill="#8d8c99" opacity={0.35} />
+            <circle cx={120} cy={180} r={3} fill="#8d8c99" opacity={0.25} />
+          </g>
+        </g>
+      );
     case 'success':
     case 'cool':
-    case 'show':
       return (
         <g className="pet-fx">
           {sparkles([
@@ -659,6 +701,9 @@ export interface PetSvgProps {
   state?: PetState;
   expression?: PetExpression;
   prop?: PetProp | null;
+  trick?: PetTrick | null;
+  /** Tekst na tabliczce (rekwizyt 'sign'). */
+  propText?: string;
   /** Obrót wokół osi pionowej w stopniach (0 = przodem, 90 = bokiem, 180 = tyłem) – do podglądów. */
   yaw?: number;
   className?: string;
@@ -678,11 +723,21 @@ export function yawVars(yaw: number): CSSProperties {
   };
 }
 
+const PHONE_TRICKS: ReadonlySet<PetTrick> = new Set(['tap', 'call', 'selfie']);
+
+/** Jaki rekwizyt i trik wynikają ze stanu (np. stan 'coffee' = kubek). */
+function resolveProp(state: PetState, prop: PetProp | null, trick: PetTrick | null): [PetProp | null, PetTrick | null] {
+  if (state === 'coffee') return ['coffee', 'sip'];
+  if (state === 'float') return ['umbrella', 'twirl'];
+  if (state === 'show' && prop) return [prop, trick ?? 'hold'];
+  return [null, null];
+}
+
 /**
- * Grafika maskotki w czarnej bluzie z kapturem. Poza i animacje biorą się z CSS (pet.css)
- * i atrybutu data-pet-state rodzica, a mina, akcesoria i rekwizyty z propsów.
+ * Grafika maskotki w czarnej bluzie z kapturem. Pozę ustawia silnik (stawy z atrybutem data-j),
+ * a mina, akcesoria i rekwizyty pochodzą z propsów.
  */
-export function PetSvg({ state = 'idle', expression = 'neutral', prop = null, yaw, className }: PetSvgProps) {
+export function PetSvg({ state = 'idle', expression = 'neutral', prop = null, trick = null, propText, yaw, className }: PetSvgProps) {
   const uid = `pet${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const ids: Ids = {
     skin: `${uid}skin`,
@@ -710,17 +765,26 @@ export function PetSvg({ state = 'idle', expression = 'neutral', prop = null, ya
   const blush = expression === 'happy' || expression === 'love' || expression === 'excited' || expression === 'content' || state === 'petted';
   const rimL = isError ? C.red : C.green;
   const rimR = isError ? C.red : C.purple;
-  const play = state === 'show' && prop ? PROP_PLAY[prop] : null;
-  const pose = play && play !== 'sip' ? PROP_POSE[play] : null;
   const rim = `url(#${ids.rim})`;
+  const neonUrl = `url(#${ids.neon})`;
 
-  const propNode =
-    pose && prop ? (
-      <g transform={`translate(${pose.x} ${pose.y})`}>
-        <g className="pet-prop">
-          <g transform={`translate(${pose.dx ?? 0} ${pose.dy ?? 0}) scale(${pose.s})`}>
-            {play === 'phone' ? <PhoneProp name={prop} uid={uid} neon={`url(#${ids.neon})`} /> : <PropArt name={prop} uid={uid} neon={`url(#${ids.neon})`} />}
-          </g>
+  const [shownProp, shownTrick] = resolveProp(state, prop, trick);
+  const place = shownProp && shownTrick ? placeFor(shownProp, shownTrick) : null;
+  const art =
+    shownProp && shownTrick ? (
+      shownProp === 'coffee' ? (
+        <Mug neon={neonUrl} />
+      ) : PHONE_TRICKS.has(shownTrick) && (shownProp === 'booking' || shownProp === 'airbnb' || shownProp === 'blik') ? (
+        <PhoneProp name={shownProp} uid={uid} neon={neonUrl} />
+      ) : (
+        <PropArt name={shownProp} uid={uid} neon={neonUrl} text={propText} />
+      )
+    ) : null;
+  const propAt = (layer: PropLayer) =>
+    place && place.layer === layer ? (
+      <g transform={`translate(${place.x} ${place.y})`} className="pet-prop-root">
+        <g className="pet-prop" data-j="prop">
+          <g transform={`translate(${place.dx ?? 0} ${place.dy ?? 0}) scale(${place.s})`}>{art}</g>
         </g>
       </g>
     ) : null;
@@ -732,7 +796,7 @@ export function PetSvg({ state = 'idle', expression = 'neutral', prop = null, ya
       overflow="visible"
       aria-hidden="true"
       focusable="false"
-      data-pet-play={play ?? undefined}
+      data-pet-trick={shownTrick ?? undefined}
       style={yaw === undefined ? undefined : yawVars(yaw)}
     >
       <defs>
@@ -810,63 +874,63 @@ export function PetSvg({ state = 'idle', expression = 'neutral', prop = null, ya
 
       <ellipse className="pet-ground" cx={80} cy={186} rx={50} ry={7} fill={`url(#${ids.ground})`} />
       {hack && <Terminals ids={ids} />}
+      {propAt('ground-back')}
 
-      <g className="pet-lean">
-        <g className="pet-rig">
-          <Tail ids={ids} cls="pet-tail--back" />
-          <g className="pet-ears">
-            <Ear side="l" ids={ids} rim={rimL} />
-            <Ear side="r" ids={ids} rim={rimR} />
-          </g>
-
-          <Torso ids={ids} rim={rim} />
-          <Leg side="l" ids={ids} />
-          <Leg side="r" ids={ids} />
-          <Tail ids={ids} cls="pet-tail--front" />
-
-          <g transform="translate(80 142)">
-            <g className="pet-head">
-              <g transform="translate(-80 -142)">
-                <Hood ids={ids} rim={rim} hack={hack}>
-                  <g className="pet-eyes">
-                    <Face expression={expression} color={eyeColor} ids={ids} />
-                  </g>
-                  <g className="pet-cheeks">
-                    <g transform="translate(43 124) scale(0.85)">
-                      <path d={PLUS} fill={C.green} filter={`url(#${ids.neon})`} />
-                    </g>
-                    <rect x={49} y={132} width={3.2} height={3.2} fill={C.green} opacity={0.7} />
-                    <rect x={112} y={118} width={3.6} height={3.6} fill={C.green} opacity={0.75} filter={`url(#${ids.neon})`} />
-                    <rect x={117} y={113} width={2.4} height={2.4} fill={C.green} opacity={0.55} />
-                  </g>
-                  {blush && (
-                    <g className="pet-blush" filter={`url(#${ids.soft})`}>
-                      <ellipse cx={46} cy={124} rx={8} ry={4.2} fill={C.pink} opacity={0.5} />
-                      <ellipse cx={114} cy={124} rx={8} ry={4.2} fill={C.pink} opacity={0.5} />
-                    </g>
-                  )}
-                  {shades && <Shades ids={ids} />}
-                </Hood>
-              </g>
-            </g>
-          </g>
-
-          {state === 'fish' && <Rod ids={ids} />}
-          <Arm side="l" ids={ids} />
-          {pose?.mid && propNode}
-          <Arm side="r" ids={ids} />
-          {pose && !pose.mid && propNode}
-          {state === 'coffee' && (
-            <g transform="translate(80 154) scale(1.3)">
-              <g className="pet-mughold">
-                <Mug neon={`url(#${ids.neon})`} />
-              </g>
-            </g>
-          )}
-          {laptop && <Laptop ids={ids} />}
+      <g className="pet-rig" data-j="rig">
+        {propAt('back')}
+        <Tail ids={ids} cls="pet-tail--back" />
+        <g className="pet-ears">
+          <Ear side="l" ids={ids} rim={rimL} layer="a" />
+          <Ear side="r" ids={ids} rim={rimR} />
+          <Ear side="l" ids={ids} rim={rimL} layer="b" />
         </g>
+
+        {/* ręka po dalszej stronie chowa się za tułowiem */}
+        <Arm side="l" ids={ids} layer="back" />
+        <Arm side="r" ids={ids} layer="back" />
+        <Torso ids={ids} rim={rim} />
+        {/* bliższa noga zawsze na wierzchu: lewa jest rysowana przed albo po prawej */}
+        <Leg side="l" ids={ids} layer="a" />
+        <Leg side="r" ids={ids} />
+        <Leg side="l" ids={ids} layer="b" />
+        <Tail ids={ids} cls="pet-tail--front" />
+
+        <g transform="translate(80 142)">
+          <g className="pet-head" data-j="head">
+            <g transform="translate(-80 -142)">
+              <Hood ids={ids} rim={rim} hack={hack} headProp={propAt('head')}>
+                <g className="pet-eyes" data-j="eyes">
+                  <Face expression={expression} color={eyeColor} ids={ids} />
+                </g>
+                <g className="pet-cheeks">
+                  <g transform="translate(43 124) scale(0.85)">
+                    <path d={PLUS} fill={C.green} filter={neonUrl} />
+                  </g>
+                  <rect x={49} y={132} width={3.2} height={3.2} fill={C.green} opacity={0.7} />
+                  <rect x={112} y={118} width={3.6} height={3.6} fill={C.green} opacity={0.75} filter={neonUrl} />
+                  <rect x={117} y={113} width={2.4} height={2.4} fill={C.green} opacity={0.55} />
+                </g>
+                {blush && (
+                  <g className="pet-blush" filter={`url(#${ids.soft})`}>
+                    <ellipse cx={46} cy={124} rx={8} ry={4.2} fill={C.pink} opacity={0.5} />
+                    <ellipse cx={114} cy={124} rx={8} ry={4.2} fill={C.pink} opacity={0.5} />
+                  </g>
+                )}
+                {shades && <Shades ids={ids} />}
+              </Hood>
+            </g>
+          </g>
+        </g>
+
+        {state === 'fish' && <Rod ids={ids} />}
+        <Arm side="l" ids={ids} layer="front" />
+        {propAt('mid')}
+        <Arm side="r" ids={ids} layer="front" />
+        {propAt('front')}
+        {laptop && <Laptop ids={ids} />}
       </g>
 
+      {propAt('ground-front')}
       <Fx state={state} ids={ids} />
     </svg>
   );

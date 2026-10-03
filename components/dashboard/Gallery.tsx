@@ -1,6 +1,6 @@
 'use client';
 
-import { PET_PROPS, PROP_LABELS, PetSvg, pet, type PetExpression, type PetProp, type PetState } from '@/components/pet';
+import { PET_PROPS, PROP_LABELS, PROP_TRICKS, PetPreview, pet, type PetExpression, type PetPose, type PetProp, type PetState, type PetTrick } from '@/components/pet';
 
 const EXPRESSIONS: Array<[PetExpression, string]> = [
   ['neutral', 'Neutralna'],
@@ -49,23 +49,73 @@ const STATES: Array<[PetState, PetExpression, string]> = [
   ['drag', 'surprised', 'Trzymana'],
 ];
 
-const TURNAROUND: Array<[number, string]> = [
-  [0, 'Przód'],
-  [35, '3/4'],
-  [75, 'Bok'],
-  [125, '3/4 tył'],
-  [180, 'Tył'],
-  [-125, '3/4 tył'],
-  [-75, 'Bok'],
-  [-35, '3/4'],
+const MOVES: Array<[PetState, PetExpression, string]> = [
+  ['lie', 'content', 'Leży'],
+  ['roll', 'excited', 'Turla się'],
+  ['sitEdge', 'content', 'Siedzi na krawędzi'],
+  ['stretch', 'sleepy', 'Przeciąga się'],
+  ['dance', 'excited', 'Tańczy'],
+  ['wave', 'happy', 'Macha'],
+  ['point', 'curious', 'Pokazuje'],
+  ['float', 'happy', 'Parasol'],
 ];
 
-function Preview({ state, expression, prop, label, yaw }: { state: PetState; expression: PetExpression; prop?: PetProp; label: string; yaw?: number }) {
+const TRICKS: Array<[PetProp, PetTrick, string]> = [
+  ['ball', 'kick', 'Kopie piłkę'],
+  ['plane', 'throw', 'Puszcza samolot'],
+  ['allegro', 'toss', 'Podrzuca paczkę'],
+  ['box', 'hide', 'Chowa się w pudle'],
+  ['allegro', 'sit-on', 'Siedzi na paczce'],
+  ['skateboard', 'ride', 'Jeździ na desce'],
+  ['skateboard', 'kickflip', 'Kickflip'],
+  ['headphones', 'dance', 'Słucha muzyki'],
+  ['book', 'read', 'Czyta'],
+  ['magnifier', 'inspect', 'Ogląda przez lupę'],
+  ['laptop', 'type', 'Pisze na laptopie'],
+  ['blik', 'tap', 'Płaci BLIKIEM'],
+  ['booking', 'selfie', 'Selfie'],
+  ['airbnb', 'call', 'Dzwoni'],
+  ['balloon', 'float', 'Balonik'],
+  ['umbrella', 'twirl', 'Kręci parasolem'],
+  ['heart', 'hug', 'Przytula'],
+  ['database', 'drum', 'Bębni'],
+  ['gear', 'rotate', 'Kręci zębatką'],
+  ['bug', 'chase', 'Łapie buga'],
+  ['coffee', 'sip', 'Kawa'],
+  ['sign', 'wave', 'Tabliczka'],
+  ['globe', 'spin', 'Kręci globusem'],
+  ['box', 'carry', 'Nosi pudło'],
+];
+
+const TURNAROUND: Array<[number, string]> = [
+  [0, 'Przód'],
+  [40, '3/4'],
+  [90, 'Bok'],
+  [140, '3/4 tył'],
+  [180, 'Tył'],
+  [-140, '3/4 tył'],
+  [-90, 'Bok'],
+  [-40, '3/4'],
+];
+
+function Preview({
+  state,
+  expression,
+  prop,
+  trick,
+  label,
+  yaw,
+}: {
+  state: PetState;
+  expression: PetExpression;
+  prop?: PetProp;
+  trick?: PetTrick;
+  label: string;
+  yaw?: number;
+}) {
   return (
     <figure className="preview">
-      <div className="pet-preview" data-pet-state={state} style={{ ['--dir' as string]: 1 }}>
-        <PetSvg state={state} expression={expression} prop={prop ?? (state === 'coffee' ? 'coffee' : null)} yaw={yaw} />
-      </div>
+      <PetPreview state={state} expression={expression} prop={prop ?? null} trick={trick ?? null} yaw={yaw} propText={prop === 'sign' ? 'Hej!' : undefined} />
       <figcaption>{label}</figcaption>
     </figure>
   );
@@ -76,7 +126,7 @@ export function Gallery() {
     <section className="card span-2" data-pet-surface="perimeter">
       <header className="card-head">
         <h2>Galeria: miny, stany i rekwizyty</h2>
-        <span className="muted">wszystko to SVG + CSS, zero bibliotek · kliknij rekwizyt, a maskotka go pokaże</span>
+        <span className="muted">SVG + animacja szkieletowa w JS, zero bibliotek · kliknij trik albo rekwizyt, a maskotka go zrobi</span>
       </header>
       <h3 className="sub">Obrót 3D</h3>
       <div className="preview-row">
@@ -96,13 +146,29 @@ export function Gallery() {
           <Preview key={s} state={s} expression={e} label={label} />
         ))}
       </div>
+      <h3 className="sub">Ruchy</h3>
+      <div className="preview-row">
+        {MOVES.map(([s, e, label]) => (
+          <button key={s} type="button" className="preview preview-btn" onClick={() => (s === 'float' ? pet.play('umbrella', 'twirl') : pet.pose(s as PetPose))} data-pet-surface="off">
+            <PetPreview state={s} expression={e} />
+            <span className="preview-label">{label}</span>
+          </button>
+        ))}
+      </div>
+      <h3 className="sub">Zabawa rekwizytami</h3>
+      <div className="preview-row">
+        {TRICKS.map(([p, t, label]) => (
+          <button key={`${p}-${t}`} type="button" className="preview preview-btn" onClick={() => pet.play(p, t)} data-pet-surface="off">
+            <PetPreview state={p === 'coffee' ? 'coffee' : 'show'} expression={t === 'inspect' ? 'curious' : 'happy'} prop={p} trick={t} propText={p === 'sign' ? 'Hej!' : undefined} />
+            <span className="preview-label">{label}</span>
+          </button>
+        ))}
+      </div>
       <h3 className="sub">Rekwizyty</h3>
       <div className="preview-row">
         {PET_PROPS.filter((p) => p !== 'coffee').map((p) => (
-          <button key={p} type="button" className="preview preview-btn" onClick={() => pet.show(p)} data-pet-surface="off">
-            <div className="pet-preview pet-preview--play" data-pet-state="show">
-              <PetSvg state="show" expression="happy" prop={p} />
-            </div>
+          <button key={p} type="button" className="preview preview-btn" onClick={() => pet.play(p)} data-pet-surface="off">
+            <PetPreview state="show" expression="happy" prop={p} trick={PROP_TRICKS[p][0]} propText={p === 'sign' ? 'Hej!' : undefined} />
             <span className="preview-label">{PROP_LABELS[p]}</span>
           </button>
         ))}

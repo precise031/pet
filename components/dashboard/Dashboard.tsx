@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { PetSvg, pet } from '@/components/pet';
+import { PetPreview, pet } from '@/components/pet';
 import { FloatingWindow, type WindowState } from './FloatingWindow';
 import { Gallery } from './Gallery';
 import { Icon, type IconName } from './Icon';
@@ -127,9 +127,7 @@ export function Dashboard() {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-pet pet-preview" data-pet-state="idle">
-            <PetSvg />
-          </div>
+          <PetPreview className="brand-pet" state="idle" />
           <div>
             <strong>Bunny Panel</strong>
             <small>z maskotką</small>
@@ -276,6 +274,28 @@ export function Dashboard() {
               </button>
               <button type="button" className="btn" onClick={() => pet.goTo('.stats .stat:last-child', 'Sprawdzam błędy… 🔍')}>
                 Idź do „Błędy API”
+              </button>
+              <button type="button" className="btn" onClick={() => pet.emit('order:new')}>
+                Nowe zamówienie (reguła)
+              </button>
+              <button type="button" className="btn" onClick={() => pet.emit('deploy')}>
+                Deploy (scenka z reguły)
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  pet.sequence([
+                    { goTo: '#note-card' },
+                    { play: 'book', trick: 'read', ms: 3000 },
+                    { pose: 'stretch', ms: 1800 },
+                    { play: 'ball', trick: 'kick' },
+                    { wait: 2500 },
+                    { pose: 'lie', ms: 4000 },
+                  ])
+                }
+              >
+                Scenka: czyta, kopie piłkę, leży
               </button>
             </div>
             <ul className="activity">

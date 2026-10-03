@@ -1,7 +1,50 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { PET_PROPS, PROP_LABELS, pet } from '@/components/pet';
+import { PET_PROPS, PROP_LABELS, PROP_TRICKS, pet, type PetPose, type PetProp, type PetTrick } from '@/components/pet';
+
+const POSES: Array<[PetPose, string]> = [
+  ['lie', '🛋 Połóż się'],
+  ['roll', '🌀 Turlaj się'],
+  ['sitEdge', '🪑 Usiądź na krawędzi'],
+  ['stretch', '🙆 Przeciągnij się'],
+  ['dance', '🕺 Tańcz'],
+  ['wave', '👋 Pomachaj'],
+  ['point', '👉 Pokaż palcem'],
+  ['spin', '💫 Obrót'],
+  ['turnBack', '↩ Odwróć się'],
+  ['look', '👀 Rozejrzyj się'],
+];
+
+const TRICK_LABELS: Record<PetTrick, string> = {
+  hold: 'trzymaj',
+  toss: 'podrzucaj',
+  spin: 'kręć',
+  wave: 'machaj',
+  tap: 'stukaj',
+  call: 'dzwoń',
+  selfie: 'selfie',
+  bounce: 'odbijaj',
+  drum: 'bębnij',
+  rotate: 'obracaj',
+  chase: 'goń',
+  hug: 'przytul',
+  type: 'pisz',
+  sip: 'pij',
+  blow: 'dmuchaj',
+  read: 'czytaj',
+  inspect: 'oglądaj',
+  kick: 'kopnij',
+  throw: 'rzuć',
+  float: 'lewituj',
+  twirl: 'kręć',
+  ride: 'jedź',
+  kickflip: 'kickflip',
+  dance: 'tańcz',
+  'sit-on': 'usiądź',
+  hide: 'schowaj się',
+  carry: 'noś',
+};
 
 interface Props {
   onOpenWindow: () => void;
@@ -15,6 +58,7 @@ export function PetControls({ onOpenWindow, onTwoWindows }: Props) {
   const [typing, setTyping] = useState(true);
   const [hobbies, setHobbies] = useState(true);
   const [touch, setTouch] = useState(true);
+  const [prop, setProp] = useState<PetProp>('ball');
 
   const onSay = (e: FormEvent) => {
     e.preventDefault();
@@ -97,13 +141,32 @@ export function PetControls({ onOpenWindow, onTwoWindows }: Props) {
         </button>
       </div>
 
-      <h3 className="sub">Rekwizyty</h3>
+      <h3 className="sub">Ruchy</h3>
+      <div className="btn-grid">
+        {POSES.map(([p, label]) => (
+          <button key={p} className="btn" type="button" onClick={() => pet.pose(p)}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <h3 className="sub">Rekwizyty i triki</h3>
       <div className="chip-row">
         {PET_PROPS.map((p) => (
-          <button key={p} type="button" className="chip" data-pet-prop={p}>
+          <button key={p} type="button" className={`chip${p === prop ? ' is-active' : ''}`} onClick={() => setProp(p)} aria-pressed={p === prop}>
             {PROP_LABELS[p]}
           </button>
         ))}
+      </div>
+      <div className="chip-row trick-row">
+        {PROP_TRICKS[prop].map((t) => (
+          <button key={t} type="button" className="chip chip-trick" onClick={() => pet.play(prop, t)}>
+            ▶ {TRICK_LABELS[t]}
+          </button>
+        ))}
+        <button type="button" className="chip chip-trick" onClick={() => pet.play(prop)}>
+          🎲 sama wybierz
+        </button>
       </div>
 
       <label className="range">
@@ -171,8 +234,8 @@ export function PetControls({ onOpenWindow, onTwoWindows }: Props) {
       </div>
 
       <p className="hint">
-        Pogłaszcz główkę kursorem · połaskocz brzuszek · dotknij ucha · kliknij w głowę · złap i rzuć · zostaw stronę na 45 s, a zaśnie ·
-        kliknij w pole tekstowe, a przybiegnie pisać.
+        Pogłaszcz główkę kursorem · połaskocz brzuszek · dotknij ucha · kliknij w głowę · złap i rzuć · dwuklik = obrót · zostaw stronę na 45 s,
+        a zaśnie · kliknij w pole tekstowe, a przybiegnie pisać.
       </p>
     </section>
   );
