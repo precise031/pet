@@ -1,4 +1,4 @@
-import { PET_EVENT, type PetCommand, type PetOptions, type PetReaction, type PetTarget } from './types';
+import { PET_EVENT, type PetActivity, type PetCommand, type PetOptions, type PetProp, type PetReaction, type PetTarget } from './types';
 
 function send(cmd: PetCommand) {
   if (typeof window === 'undefined') return;
@@ -16,6 +16,16 @@ export const pet = {
   react: (reaction: PetReaction, text?: string) => send({ type: 'react', reaction, text }),
   /** Skocz na element (Element albo selektor CSS). */
   goTo: (target: PetTarget, text?: string) => send({ type: 'goTo', target, text }),
+  /** Pokaż rekwizyt, np. 'allegro', 'olx', 'blik', 'vinted', 'cloudflare', 'database'… */
+  show: (prop: PetProp, text?: string, ms?: number) => send({ type: 'act', activity: 'show', prop, text, ms }),
+  /** Czynność: 'coffee' | 'hack' | 'fish' | 'cool' | 'trip' | 'show'. */
+  act: (activity: PetActivity, text?: string) => send({ type: 'act', activity, text }),
+  coffee: (text?: string) => send({ type: 'act', activity: 'coffee', text }),
+  hack: (text?: string) => send({ type: 'act', activity: 'hack', text }),
+  fish: (text?: string) => send({ type: 'act', activity: 'fish', text }),
+  cool: (text?: string) => send({ type: 'act', activity: 'cool', text }),
+  /** Potknij się (przy krawędzi – spadnij koziołkując). */
+  trip: () => send({ type: 'act', activity: 'trip' }),
   /** Skocz na losowy widoczny element. */
   jump: () => send({ type: 'jump' }),
   sleep: () => send({ type: 'sleep' }),

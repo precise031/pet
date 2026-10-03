@@ -1,8 +1,12 @@
+import { PROP_LINES } from './props';
 import {
   PET_EVENT,
+  PET_PROPS,
+  type PetActivity,
   type PetCommand,
   type PetExpression,
   type PetOptions,
+  type PetProp,
   type PetReaction,
   type PetState,
   type PetTarget,
@@ -11,9 +15,12 @@ import {
 
 const GRAVITY = 2400; // px/s²
 const MAX_FALL = 2600;
-const WALK_SPEED = 52; // px/s przy rozmiarze 72
-const RUN_SPEED = 150;
+const WALK_SPEED = 46; // px/s przy rozmiarze 72
+const RUN_SPEED = 140;
 const HARD_LANDING = 1500;
+const VIEW_W = 160; // viewBox grafiki (PetSvg)
+const VIEW_H = 190;
+const FISH_MS = 8000; // musi się zgadzać z animacjami wędki w pet.css
 
 interface Rect {
   left: number;
@@ -50,6 +57,8 @@ interface AirMode {
   ignore: Surface | null;
   t: number;
   tLand: number;
+  spin: number; // °/s – koziołkowanie po potknięciu
+  hangUntil: number; // „kreskówkowe” zawiśnięcie w powietrzu przed upadkiem
 }
 
 interface DragMode {
@@ -66,7 +75,58 @@ interface DragMode {
 
 type Mode = GroundMode | AirMode | DragMode;
 
-type ActionName = 'idle' | 'walk' | 'run' | 'sit' | 'look' | 'sleep' | 'wake' | 'typing' | 'watch';
+type ActionName =
+  | 'idle'
+  | 'walk'
+  | 'run'
+  | 'sit'
+  | 'look'
+  | 'sleep'
+  | 'wake'
+  | 'typing'
+  | 'watch'
+  | 'coffee'
+  | 'hack'
+  | 'fish'
+  | 'show'
+  | 'cool'
+  | 'turnback'
+  | 'approach';
+
+interface Action {
+  name: ActionName;
+  start: number;
+  until: number;
+  prop?: PetProp;
+  said?: boolean;
+  targetX?: number;
+}
+
+/** Nastrój 0..1 – od niego zależy, co maskotka sama wybiera. */
+interface Mood {
+  energy: number;
+  fun: number;
+  social: number;
+  curiosity: number;
+}
+
+const BRAND_WORDS: Array<[RegExp, PetProp]> = [
+  [/allegro\s*lokalnie/i, 'allegro-lokalnie'],
+  [/allegro/i, 'allegro'],
+  [/\bolx\b/i, 'olx'],
+  [/vinted/i, 'vinted'],
+  [/alebilet/i, 'alebilet'],
+  [/ticketmaster/i, 'ticketmaster'],
+  [/booking/i, 'booking'],
+  [/airbnb/i, 'airbnb'],
+  [/cloudflare/i, 'cloudflare'],
+  [/\bblik/i, 'blik'],
+  [/paczk|kurier|wysył/i, 'box'],
+  [/baz[aęy] danych|backup|sql/i, 'database'],
+  [/błęd|bug/i, 'bug'],
+];
+
+type Zone = 'ear-l' | 'ear-r' | 'head' | 'belly' | 'feet';
 
 interface Point {
   x: number;
@@ -77,15 +137,39 @@ interface Point {
 
 const LINES = {
   hello: ['Hej! Jestem tu 👋', 'Cześć! Popilnuję panelu 🐰', 'Siemka! 👋'],
-  poke: ['Hej! 👋', 'Co tam?', 'Hihi, łaskocze!', 'Klik!', 'Jestem, jestem!', 'Potrzebujesz czegoś?'],
+  poke: ['Hej! 👋', 'Co tam?', 'Klik!', 'Jestem, jestem!', 'Potrzebujesz czegoś?'],
   hard: ['Auć! ⭐', 'Ała… 😵', 'Uff… twarde lądowanie'],
   thrown: ['Wiiiiii! 🚀', 'Aaaa!', 'Leeeecę!'],
   drag: ['Gdzie mnie niesiesz?', 'Hej, postaw mnie!', 'Wysoko! 😳'],
   attract: ['Ooo, coś nowego! 👀', 'Co to? 👀'],
+  trip: ['Auć! 🤕', 'Kto tu położył ten piksel?!', 'Nic się nie stało… 😅'],
+  tumble: ['Uaaaa! 😱', 'Łooo! 🙃', 'Nieeee!'],
+  oops: ['O-oł… 😳', 'Oj…', 'Chyba nie ma podłogi…'],
+  pet: ['Mrrr… 💚', 'Jeszcze, jeszcze! 🥰', 'Miło… 😌'],
+  belly: ['Hihi! Łaskocze! 🤭', 'Nie brzuszek! 😆', 'Hahaha, przestań! 😂'],
+  ear: ['Ej, to moje ucho! 😾', 'Ucho jest wrażliwe!', 'Nie ciągnij za ucho 🐰'],
+  head: ['Auć! Moja głowa! 😵', 'Bonk! 🔨', 'Ała!'],
+  feet: ['Stópki łaskoczą! 😂', 'Hi-hi, palce!'],
+  coffee: ['Kawa = kod ☕', 'Przerwa na kawkę ☕', 'Bez kawy nie deployuję ☕'],
+  tired: ['Potrzebuję kawy… ☕', 'Bateria 10%… 🔋'],
+  bored: ['Nudzi mi się… 🥱', 'Co by tu zbroić… 😏'],
+  lonely: ['Pobaw się ze mną 🥺', 'Halo? Jest tu ktoś? 👀'],
+  back: ['Witaj z powrotem! 👋', 'O, wracasz! 😊'],
+  spin: ['Wiii! 💫', 'Piruet! ✨'],
+  turnback: ['Co tu mamy… 🤔', 'Sprawdzam stronę 👀', 'Hmm, ciekawe…'],
+  approach: ['Co tam robisz? 👀', 'Hej! 👋', 'Pokaż! 👀'],
+  dizzy: ['Kręci mi się w głowie 😵‍💫', 'Za szybko! 🌀'],
+  copy: ['Skopiowane! 📋', 'Mam w schowku 📋'],
+  paste: ['Wklejone! 📌'],
+  hack: ['Wchodzę do systemu… 💻', 'Hakuję mainframe 😈', 'Kompiluję… 🧑‍💻'],
+  fish: ['Idę na ryby 🎣', 'Może coś bierze… 🎣'],
+  caught: ['Mam rybę! 🐟', 'Złowione! 🐟', 'Ale sztuka! 🐠'],
+  cool: ['Wszystko pod kontrolą 😎', 'Deploy bez testów 😎'],
+  noFish: ['Nie ma gdzie łowić 🎣'],
   success: ['Udało się! ✨', 'Sukces! 🎉', 'Gotowe! ✅'],
   error: ['Ups… coś poszło nie tak ⚠️', 'Błąd! 😵', 'Oj, to nie działa…'],
   confused: ['Hmm? 🤔', 'Że co?', 'Nie rozumiem…'],
-  happy: ['Jej! 💜', 'Super! 😄'],
+  happy: ['Jej! 💚', 'Super! 😄'],
   sad: ['Smutno mi… 😢', 'Ehh…'],
 } satisfies Record<string, string[]>;
 
@@ -97,9 +181,11 @@ const REACTIONS: Record<PetReaction, [PetState, PetExpression, number]> = {
   sad: ['sad', 'sad', 2600],
 };
 
+const ACTIVITIES: readonly PetActivity[] = ['coffee', 'hack', 'fish', 'cool', 'trip', 'show'];
 const NON_TEXT_INPUTS = new Set(['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'color', 'file', 'image', 'hidden']);
 
 const pick = <T>(list: readonly T[]): T => list[Math.floor(Math.random() * list.length)];
+const now = () => performance.now();
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -190,7 +276,7 @@ export interface PetElements {
 
 /**
  * Cały „mózg” i fizyka maskotki. Niezależne od Reacta: dostaje elementy DOM,
- * co klatkę ustawia transform, a zmianę pozy/miny zgłasza przez onVisual.
+ * co klatkę ustawia transform, a zmianę pozy/miny/rekwizytu zgłasza przez onVisual.
  */
 export class PetController {
   private opts: PetOptions;
@@ -200,12 +286,25 @@ export class PetController {
   private nx = 0; // normalna krawędzi, na której stoi
   private ny = -1;
   private dir: 1 | -1 = 1;
+  private yaw = 0; // obrót wokół osi pionowej (°), 0 = przodem, ±180 = tyłem
+  private yawVel = 0;
+  private spin: { start: number; from: number; sign: 1 | -1 } | null = null;
+  private speedNow = 0; // wygładzona prędkość marszu
+  private mood: Mood = { energy: 0.85, fun: 0.55, social: 0.5, curiosity: 0.5 };
+  private attention: { x: number; y: number; until: number } | null = null;
+  private recentProps: PetProp[] = [];
+  private shakeFlips: number[] = [];
+  private lastPointerDx = 0;
+  private hiddenAt = 0;
   private mode: Mode;
-  private action: { name: ActionName; until: number } = { name: 'idle', until: 0 };
+  private action: Action = { name: 'idle', start: 0, until: 0 };
   private impact: { state: 'land' | 'splat' | 'recover'; until: number } | null = null;
   private override: { state: PetState; expression: PetExpression; until: number } | null = null;
   private launch: { vx: number; vy: number; target: Surface; T: number; from: Surface | null; at: number } | null = null;
+  private trip: { until: number; force: boolean } | null = null;
+  private tripAtEdge = false; // biegnie do krawędzi, żeby się na niej wywalić
   private pendingGoto: Surface | null = null;
+  private pendingAct: { activity: PetActivity; prop?: PetProp; text?: string; ms?: number } | null = null;
   private surfaces = new Map<Element, Surface>();
   private extra = new Set<Element>();
   private solid = new WeakMap<Element, boolean>();
@@ -221,13 +320,15 @@ export class PetController {
   private hovered = false;
   private pokes: number[] = [];
   private press: { id: number; x: number; y: number; dragging: boolean } | null = null;
+  private touch: { zone: Zone | null; dist: number; x: number; y: number; leftAt: number } = { zone: null, dist: 0, x: 0, y: 0, leftAt: 0 };
+  private saidAt = new Map<string, number>();
   private workEl: HTMLElement | null = null;
   private workRetryAt = 0;
   private lastTypeAt = -1e9;
   private bubbleOn = false;
   private bubbleUntil = 0;
   private bubbleSize = { w: 0, h: 0 };
-  private visual: PetVisual = { state: 'fall', expression: 'surprised' };
+  private visual: PetVisual = { state: 'fall', expression: 'surprised', prop: null };
   private greeted = false;
   private shown = false;
   private reducedMotion = false;
@@ -251,14 +352,14 @@ export class PetController {
     // Start: spada z góry ekranu.
     this.cx = innerWidth * rand(0.55, 0.85);
     this.cy = -opts.size;
-    this.mode = { kind: 'air', vx: 0, vy: 0, target: null, ignore: null, t: 0, tLand: 0 };
+    this.mode = this.air(0, 0);
   }
 
   private get H() {
     return this.opts.size;
   }
   private get W() {
-    return (this.opts.size * 100) / 120;
+    return (this.opts.size * VIEW_W) / VIEW_H;
   }
   private get k() {
     return this.opts.size / 72;
@@ -285,6 +386,12 @@ export class PetController {
     win('click', this.onClick, { capture: true });
     win('error', this.onError);
     win('unhandledrejection', this.onRejection);
+    win('mouseup', this.onMouseUp);
+    win('copy', () => this.pageEvent('copy'));
+    win('paste', () => this.pageEvent('paste'));
+    const onVis = () => this.onVisibility();
+    document.addEventListener('visibilitychange', onVis);
+    this.disposers.push(() => document.removeEventListener('visibilitychange', onVis));
     window.addEventListener(PET_EVENT, this.onCommand);
     this.disposers.push(() => window.removeEventListener(PET_EVENT, this.onCommand));
 
@@ -297,6 +404,12 @@ export class PetController {
     petOn('pointermove', this.onPetMove);
     petOn('pointerup', this.onPetUp);
     petOn('pointercancel', this.onPetCancel);
+    petOn('dblclick', () => {
+      const t = performance.now();
+      this.startSpin(t);
+      this.override = { state: 'happy', expression: 'excited', until: t + 900 };
+      this.sayOnce('spin', t, 4000);
+    });
     petOn('pointerover', (e) => {
       if (e.pointerType === 'mouse') this.hovered = true;
     });
@@ -350,6 +463,10 @@ export class PetController {
     const now = performance.now();
     this.wakeUp(now);
     this.override = { state: def[0], expression: def[1], until: now + def[2] };
+    if (kind === 'success' || kind === 'happy') {
+      this.startSpin(now);
+      this.feelGood({ fun: 0.15, social: 0.1 });
+    } else if (kind === 'error') this.feelGood({ curiosity: 0.2, fun: -0.1 });
     if (text !== '') this.say(text ?? pick(LINES[kind]));
   }
 
@@ -366,7 +483,59 @@ export class PetController {
     const s = this.ensureSurface(el);
     if (text) this.say(text);
     if (this.mode.kind === 'ground' && this.mode.surface === s) return;
+    this.endActivity(now);
     this.jumpTo(s, now);
+  }
+
+  /** Czynność: kawa, hakowanie, wędka, okulary, potknięcie, pokazanie rekwizytu. */
+  act(activity: PetActivity, prop?: PetProp, text?: string, ms?: number) {
+    if (!ACTIVITIES.includes(activity)) return;
+    const now = performance.now();
+    if (this.action.name === 'sleep' || this.forcedSleep) this.wakeUp(now);
+    this.override = null;
+    const m = this.mode;
+    if (m.kind !== 'ground' || !this.isUpright() || this.launch || this.trip) {
+      this.pendingAct = { activity, prop, text, ms };
+      if (m.kind === 'ground' && !this.isUpright()) this.drop();
+      return;
+    }
+    if (activity === 'trip') {
+      const sf = m.surface;
+      if (!sf.el) {
+        this.startTrip(now, false);
+        return;
+      }
+      // biegnie do bliższej krawędzi i tam się potyka
+      const [a, b] = sf.kind === 'top' ? this.topRange(sf) : [0, Math.max(0, sf.rect.width - 2 * sf.radius)];
+      this.dir = b - m.s < m.s - a ? 1 : -1;
+      this.tripAtEdge = true;
+      this.setAction('run', now + 8000);
+      return;
+    }
+    if (activity === 'fish' && !m.surface.el) {
+      // z podłogi nie da się łowić – najpierw wskakujemy na jakiś element
+      const t = this.pickTarget(true);
+      if (!t) {
+        this.say(pick(LINES.noFish));
+        return;
+      }
+      this.pendingAct = { activity, prop, text, ms };
+      this.jumpTo(t, now);
+      return;
+    }
+    const durations: Record<Exclude<PetActivity, 'trip'>, number> = {
+      coffee: rand(7000, 10000),
+      hack: rand(6000, 9000),
+      fish: FISH_MS + 600,
+      cool: 2600,
+      show: rand(4400, 5600),
+    };
+    const shown: PetProp | undefined = activity === 'show' ? (prop ?? this.pickProp()) : undefined;
+    if (activity === 'coffee') this.feelGood({ energy: 0.3 });
+    if (activity === 'show' || activity === 'fish') this.feelGood({ fun: 0.2 });
+    this.action = { name: activity, start: now, until: now + (ms ?? durations[activity]), prop: shown };
+    const line = text ?? (activity === 'show' ? (shown ? pick(PROP_LINES[shown]) : '') : pick(LINES[activity]));
+    if (line) this.say(line);
   }
 
   // ───────────────────────── pętla ─────────────────────────
@@ -382,9 +551,33 @@ export class PetController {
     else if (m.kind === 'air') this.stepAir(m, dt, t);
     else this.angle = lerpAngle(this.angle, 0, 1 - Math.exp(-dt * 14));
 
+    this.updateMood(dt, t);
     this.think(t);
-    this.render(t);
+    this.render(t, dt);
   };
+
+  private updateMood(dt: number, now: number) {
+    const m = this.mood;
+    const a = this.action.name;
+    const moving = this.speedNow > 5;
+    m.energy += dt * (a === 'sleep' ? 0.05 : a === 'sit' || a === 'coffee' ? 0.025 : moving ? (a === 'run' ? -0.012 : -0.004) : -0.0012);
+    m.fun += dt * (a === 'show' || a === 'fish' || a === 'cool' || this.spin ? 0.035 : -0.005);
+    m.social += dt * (now - this.lastActivity < 5000 ? 0.002 : -0.0035);
+    m.curiosity += dt * -0.007;
+    for (const k of ['energy', 'fun', 'social', 'curiosity'] as const) m[k] = clamp(m[k], 0, 1);
+  }
+
+  private feelGood(delta: Partial<Mood>) {
+    for (const [k, v] of Object.entries(delta) as Array<[keyof Mood, number]>) this.mood[k] = clamp(this.mood[k] + v, 0, 1);
+  }
+
+  private startSpin(now: number, sign?: 1 | -1) {
+    this.spin = { start: now, from: this.yaw, sign: sign ?? (Math.random() < 0.5 ? 1 : -1) };
+  }
+
+  private air(vx: number, vy: number, extra: Partial<AirMode> = {}): AirMode {
+    return { kind: 'air', vx, vy, target: null, ignore: null, t: 0, tLand: 0, spin: 0, hangUntil: 0, ...extra };
+  }
 
   private stepGround(m: GroundMode, dt: number, now: number) {
     const sf = m.surface;
@@ -396,13 +589,41 @@ export class PetController {
       this.fitRadius(sf);
     }
 
-    const speed = this.moveSpeed(now);
+    const wanted = this.moveSpeed(now);
+    // płynne ruszanie i hamowanie
+    this.speedNow += (wanted - this.speedNow) * Math.min(1, dt * (wanted > this.speedNow ? 5 : 9));
+    if (this.speedNow < 0.5) this.speedNow = 0;
+    const speed = this.speedNow;
+    // podchodzi do kursora / celu
+    const act = this.action;
+    if (act.name === 'approach' && act.targetX !== undefined) {
+      const px = sf.kind === 'top' ? sf.rect.left + m.s : this.cx;
+      const dx = act.targetX - px;
+      if (Math.abs(dx) < 14 * this.k) {
+        this.setAction('look', now + rand(1200, 2200));
+        if (Math.random() < 0.5) this.sayOnce('approach', now, 9000);
+      } else this.dir = dx > 0 ? 1 : -1;
+    }
+    if (this.tripAtEdge && wanted && this.isUpright()) {
+      const [ea, eb] = sf.kind === 'top' ? this.topRange(sf) : [0, Math.max(0, sf.rect.width - 2 * sf.radius)];
+      if ((this.dir > 0 ? eb - m.s : m.s - ea) < 26 * this.k) {
+        this.tripAtEdge = false;
+        this.startTrip(now, true);
+        return;
+      }
+    }
+    // czasem się potyka (tylko gdy idzie prosto po górze)
+    if (wanted && !this.reducedMotion && this.isUpright() && Math.random() < dt * (this.action.name === 'run' ? 0.05 : 0.014)) {
+      this.startTrip(now);
+      return;
+    }
     if (sf.kind === 'top') {
       const [a, b] = this.topRange(sf);
       m.s += this.dir * speed * dt;
       if (m.s < a || m.s > b) {
         m.s = clamp(m.s, a, b);
-        if (speed) this.onEdge(m, now);
+        if (wanted) this.onEdge(m, now);
+        else this.speedNow = 0;
         if (this.mode !== m) return;
       }
     } else {
@@ -422,13 +643,15 @@ export class PetController {
   }
 
   private stepAir(m: AirMode, dt: number, now: number) {
+    if (now < m.hangUntil) return; // „kreskówkowe” zawiśnięcie nad przepaścią
     m.t += dt;
     const half = this.H / 2;
     const prevFeet = this.cy + half;
     m.vy = Math.min(MAX_FALL, m.vy + GRAVITY * dt);
     this.cx += m.vx * dt;
     this.cy += m.vy * dt;
-    this.angle = lerpAngle(this.angle, 0, 1 - Math.exp(-dt * 12));
+    if (m.spin) this.angle += m.spin * dt;
+    else this.angle = lerpAngle(this.angle, 0, 1 - Math.exp(-dt * 12));
 
     const wall = this.W * 0.4;
     if (this.cx < wall) {
@@ -441,18 +664,21 @@ export class PetController {
     if (m.vy <= 0) return;
 
     const feet = this.cy + half;
+    const impact = m.spin ? HARD_LANDING + 1 : m.vy; // po koziołkowaniu zawsze plask
     const onlyTarget = m.target !== null && m.t < m.tLand * 1.3 + 0.05;
     const list = onlyTarget && m.target ? [m.target] : this.surfaces.values();
     for (const s of list) {
       // nie lądujemy na elementach tuż przy górze ekranu – maskotka byłaby prawie niewidoczna
       if (!s.el || s === m.ignore || (!onlyTarget && (!s.reachable || s.rect.top < this.H * 0.6))) continue;
+      // koziołkując nie zatrzymuje się na małych przyciskach i polach – leci na okno/kartę albo na dół
+      if (m.spin && s.kind === 'top') continue;
       const r = s === m.target ? toRect(s.el.getBoundingClientRect()) : s.rect;
       if (prevFeet <= r.top + 2 && feet >= r.top && this.cx >= r.left - 6 && this.cx <= r.right + 6) {
-        this.land(s, r, m.vy, now);
+        this.land(s, r, impact, now);
         return;
       }
     }
-    if (feet >= innerHeight) this.land(this.floor, this.floor.rect, m.vy, now);
+    if (feet >= innerHeight) this.land(this.floor, this.floor.rect, impact, now);
   }
 
   private land(s: Surface, r: Rect, vy: number, now: number, silent = false) {
@@ -476,18 +702,21 @@ export class PetController {
       if (hard) this.say(pick(LINES.hard));
       else if (!this.greeted) {
         this.greeted = true;
-        this.say(pick(LINES.hello));
+        const h = new Date().getHours();
+        this.say(h < 5 ? 'Nie śpisz jeszcze? 🌙' : h < 11 ? 'Dzień dobry! ☀️' : h >= 19 ? 'Dobry wieczór! 🌙' : pick(LINES.hello));
       }
     }
     this.stepGround(m, 0, now);
   }
 
   /** Zejście z krawędzi w powietrze (spadanie). */
-  private drop(surprised = false, vx = this.dir * 40, vy = 0) {
+  private drop(surprised = false, vx = this.dir * 40, vy = 0, extra: Partial<AirMode> = {}) {
     const ignore = this.mode.kind === 'ground' ? this.mode.surface : null;
-    this.mode = { kind: 'air', vx, vy, target: null, ignore, t: 0, tLand: 0 };
+    this.tripAtEdge = false;
+    this.mode = this.air(vx, vy, { ignore, ...extra });
     this.launch = null;
     if (surprised) this.override = null;
+    if (this.isActivity()) this.setAction('idle', 0);
   }
 
   private offscreen(now: number) {
@@ -497,7 +726,7 @@ export class PetController {
       // element uciekł do góry (scroll) – maskotka spada z góry ekranu
       this.cy = -this.H * 0.4;
       this.angle = 0;
-      this.mode = { kind: 'air', vx: 0, vy: 0, target: null, ignore: null, t: 0, tLand: 0 };
+      this.mode = this.air(0, 0);
     } else {
       this.land(this.floor, this.floor.rect, 0, now, true);
     }
@@ -512,12 +741,52 @@ export class PetController {
       return;
     }
     const r = Math.random();
-    if (r < 0.5) flip();
+    if (r < 0.42) flip();
+    else if (r < 0.56) this.walkOffEdge(now);
     else if (r < 0.8) this.drop(false, this.dir * 150 * this.k, -380); // zeskok
     else {
       const t = this.pickTarget();
       if (t) this.jumpTo(t, now);
       else this.drop(false, this.dir * 150 * this.k, -380);
+    }
+  }
+
+  /** Wchodzi w powietrze za krawędzią, zawisa, patrzy w dół… i spada. */
+  private walkOffEdge(now: number) {
+    this.cx += this.dir * this.W * 0.42;
+    this.drop(false, this.dir * 30, 0, { hangUntil: now + 750 });
+    this.say(pick(LINES.oops));
+  }
+
+  /**
+   * Potknięcie: przy krawędzi koziołkuje w dół (np. na inne okno), w środku – plask na buzię.
+   * `force` (z API) – zawsze leci z krawędzi, tej bliższej.
+   */
+  private startTrip(now: number, force = false) {
+    this.override = null;
+    this.trip = { until: now + 380, force };
+    this.setAction('idle', now + 2000);
+  }
+
+  private finishTrip(m: GroundMode, now: number) {
+    const force = this.trip?.force ?? false;
+    this.trip = null;
+    const sf = m.surface;
+    let toEdge = Infinity;
+    if (sf.el && this.isUpright()) {
+      let a = 0;
+      let b = Math.max(0, sf.rect.width - 2 * sf.radius);
+      if (sf.kind === 'top') [a, b] = this.topRange(sf);
+      if (force) this.dir = b - m.s < m.s - a ? 1 : -1; // w stronę bliższej krawędzi
+      toEdge = this.dir > 0 ? b - m.s : m.s - a;
+    }
+    if (toEdge < 70 * this.k || (force && toEdge < Infinity)) {
+      const vx = Math.max(140 * this.k, (toEdge + this.W * 0.5) / 0.5);
+      this.drop(false, this.dir * vx, -220, { spin: this.dir * 620 });
+      this.say(pick(LINES.tumble));
+    } else {
+      this.impact = { state: 'splat', until: now + 1300 };
+      this.say(pick(LINES.trip));
     }
   }
 
@@ -555,10 +824,11 @@ export class PetController {
     const T = -vy / GRAVITY + Math.sqrt((2 * (y1 - apex)) / GRAVITY);
     const vx = (x1 - this.cx) / T;
     if (Math.abs(vx) > 1) this.dir = vx > 0 ? 1 : -1;
+    if (this.isActivity()) this.setAction('idle', 0);
     this.launch = { vx, vy, target, T, from: this.mode.surface, at: now + 170 };
   }
 
-  private pickTarget(): Surface | null {
+  private pickTarget(elementsOnly = false): Surface | null {
     const cur = this.mode.kind === 'ground' ? this.mode.surface : null;
     const feetX = this.cx;
     const feetY = this.cy + this.H / 2;
@@ -570,7 +840,7 @@ export class PetController {
       const d = Math.hypot(tx - feetX, s.rect.top - feetY);
       cands.push([s, (1 / (1 + d / 320)) * (s.kind === 'perimeter' ? 1.4 : 1)]);
     }
-    if (cur?.el) cands.push([this.floor, 0.35]);
+    if (cur?.el && !elementsOnly) cands.push([this.floor, 0.35]);
     let sum = 0;
     for (const [, w] of cands) sum += w;
     let r = Math.random() * sum;
@@ -591,8 +861,12 @@ export class PetController {
       if (now >= this.launch.at) {
         const l = this.launch;
         this.launch = null;
-        this.mode = { kind: 'air', vx: l.vx, vy: l.vy, target: l.target, ignore: l.from, t: 0, tLand: l.T };
+        this.mode = this.air(l.vx, l.vy, { target: l.target, ignore: l.from, tLand: l.T });
       }
+      return;
+    }
+    if (this.trip) {
+      if (now >= this.trip.until) this.finishTrip(m, now);
       return;
     }
     if (this.impact) {
@@ -615,38 +889,116 @@ export class PetController {
       if (now < this.override.until) return;
       this.override = null;
     }
-    if (this.action.name === 'sleep') return;
+    if (this.pendingAct && this.isUpright()) {
+      const p = this.pendingAct;
+      this.pendingAct = null;
+      this.act(p.activity, p.prop, p.text, p.ms);
+      return;
+    }
+    const a = this.action;
+    if (a.name === 'sleep') return;
+    if (a.name === 'fish' && !a.said && now - a.start > FISH_MS * 0.74) {
+      a.said = true;
+      this.say(pick(LINES.caught));
+    }
     if (this.workEl) return this.doWork(m, now);
-    if (this.action.name !== 'wake' && this.isUpright() && now - this.lastActivity > this.opts.sleepAfterMs) {
+    if (!this.isActivity() && a.name !== 'wake' && this.isUpright() && now - this.lastActivity > this.opts.sleepAfterMs) {
       this.setAction('sleep', Infinity);
       return;
     }
-    if (now < this.action.until) return;
+    if (now < a.until) return;
     this.decide(m, now);
   }
 
+  /**
+   * „Mózg”: wybiera kolejną czynność z wagami zależnymi od nastroju i tego, co dzieje się na stronie.
+   * Zmęczona – siada i pije kawę, znudzona – bawi się rekwizytami i łowi ryby, stęskniona – podchodzi do kursora.
+   */
   private decide(m: GroundMode, now: number) {
-    const r = Math.random();
     if (!this.isUpright()) {
       // wisi na boku albo pod spodem elementu
+      const r = Math.random();
       if (r < 0.72) this.setAction('walk', now + rand(2500, 6000));
       else if (r < 0.88) this.setAction('idle', now + rand(1200, 2600));
       else this.drop(true);
       return;
     }
-    const roomy = !m.surface.el || m.surface.kind === 'perimeter';
-    if (r < 0.36) {
-      if (Math.random() < 0.35) this.dir = this.dir === 1 ? -1 : 1;
-      this.setAction('walk', now + rand(2000, 6000));
-    } else if (r < 0.46 && roomy && !this.reducedMotion) this.setAction('run', now + rand(1200, 2600));
-    else if (r < 0.6) this.setAction('idle', now + rand(1800, 3800));
-    else if (r < 0.7) this.setAction('look', now + rand(1600, 3000));
-    else if (r < 0.8) this.setAction('sit', now + rand(3500, 8000));
-    else {
-      const t = this.reducedMotion ? null : this.pickTarget();
-      if (t) this.jumpTo(t, now);
-      else this.setAction('walk', now + rand(2000, 4000));
+    const md = this.mood;
+    const onElement = !!m.surface.el;
+    const roomy = !onElement || m.surface.kind === 'perimeter';
+    const hobbies = this.opts.hobbies && !this.reducedMotion;
+    const canFish = onElement && m.surface.rect.bottom < innerHeight - 40 && m.surface.rect.top > this.H;
+    const pointerX = this.pointerOnLevel();
+
+    if (md.energy < 0.2) this.sayOnce('tired', now, 40000);
+    else if (md.fun < 0.15) this.sayOnce('bored', now, 40000);
+    else if (md.social < 0.12) this.sayOnce('lonely', now, 50000);
+
+    const choices: Array<[number, () => void]> = [
+      [
+        0.2 + 0.9 * md.energy,
+        () => {
+          if (Math.random() < 0.35) this.dir = this.dir === 1 ? -1 : 1;
+          this.setAction('walk', now + rand(2000, 6000));
+        },
+      ],
+      [roomy && !this.reducedMotion ? 0.5 * md.energy * (0.4 + md.fun) : 0, () => this.setAction('run', now + rand(1200, 2600))],
+      [0.4, () => this.setAction('idle', now + rand(1800, 3800))],
+      [0.2 + 0.5 * md.curiosity, () => this.setAction('look', now + rand(1600, 3000))],
+      [0.2 + 0.8 * (1 - md.energy), () => this.setAction('sit', now + rand(3500, 8000))],
+      [0.12 + 0.5 * md.curiosity, () => this.turnBack(now)],
+      [hobbies ? 0.12 + 1.3 * (1 - md.energy) : 0, () => this.act('coffee')],
+      [hobbies ? 0.12 + 0.6 * md.curiosity : 0, () => this.act('hack')],
+      [hobbies ? 0.25 + 1.2 * (1 - md.fun) : 0, () => this.act('show', this.pickProp())],
+      [hobbies && canFish ? 0.15 + 0.9 * (1 - md.fun) : 0, () => this.act('fish')],
+      [hobbies ? 0.08 + 0.3 * md.social : 0, () => this.act('cool')],
+      [hobbies ? 0.08 + 0.3 * md.fun : 0, () => {
+        this.startSpin(now);
+        this.sayOnce('spin', now, 15000);
+        this.setAction('idle', now + 1400);
+      }],
+      [pointerX !== null ? 0.15 + 1.2 * md.social : 0, () => this.setAction('approach', now + 7000, pointerX ?? undefined)],
+      [!this.reducedMotion ? 0.3 + 0.6 * md.energy : 0, () => {
+        const t = this.pickTarget();
+        if (t) this.jumpTo(t, now);
+        else this.setAction('walk', now + rand(2000, 4000));
+      }],
+    ];
+    let sum = 0;
+    for (const [w] of choices) sum += w;
+    let r = Math.random() * sum;
+    for (const [w, run] of choices) {
+      r -= w;
+      if (r <= 0) {
+        run();
+        return;
+      }
     }
+  }
+
+  /** Odwraca się tyłem i „ogląda stronę” (widać nadruk na kapturze). */
+  private turnBack(now: number) {
+    this.setAction('turnback', now + rand(2200, 3800));
+    if (Math.random() < 0.4) this.sayOnce('turnback', now, 20000);
+  }
+
+  /** Rekwizyt do zabawy – częściej te, których użytkownik ostatnio używał. */
+  private pickProp(): PetProp {
+    if (this.recentProps.length && Math.random() < 0.55) return pick(this.recentProps);
+    return pick(PET_PROPS.filter((p) => p !== 'coffee'));
+  }
+
+  /** Pozycja X kursora, jeśli jest mniej więcej na wysokości maskotki (żeby mogła do niego podejść). */
+  private pointerOnLevel(): number | null {
+    const m = this.mode;
+    if (!this.pointer || m.kind !== 'ground' || now() - this.lastActivity > 15000) return null;
+    const feet = this.cy + this.H / 2;
+    const { x, y } = this.pointer;
+    if (y > feet + 30 || y < feet - this.H * 2.2) return null;
+    const r = m.surface.rect;
+    if (x < r.left || x > r.right) return null;
+    if (Math.abs(x - this.cx) < this.W) return null;
+    return clamp(x, r.left + 10, r.right - 10);
   }
 
   private doWork(m: GroundMode, now: number) {
@@ -672,8 +1024,17 @@ export class PetController {
     this.setAction(now - this.lastTypeAt < 1400 ? 'typing' : 'watch', now + 250);
   }
 
-  private setAction(name: ActionName, until: number) {
-    this.action = { name, until };
+  private setAction(name: ActionName, until: number, targetX?: number) {
+    this.action = { name, start: performance.now(), until, targetX };
+  }
+
+  private isActivity() {
+    const n = this.action.name;
+    return n === 'coffee' || n === 'hack' || n === 'fish' || n === 'show' || n === 'cool';
+  }
+
+  private endActivity(now: number) {
+    if (this.isActivity()) this.setAction('idle', now + 400);
   }
 
   private wakeUp(now: number) {
@@ -683,9 +1044,10 @@ export class PetController {
   }
 
   private moveSpeed(now: number) {
-    if (this.launch || (this.impact && now < this.impact.until) || (this.override && now < this.override.until)) return 0;
-    if (this.action.name === 'walk') return WALK_SPEED * this.k;
-    if (this.action.name === 'run') return RUN_SPEED * this.k;
+    if (this.launch || this.trip || (this.impact && now < this.impact.until) || (this.override && now < this.override.until)) return 0;
+    const n = this.action.name;
+    if (n === 'walk' || n === 'approach') return WALK_SPEED * this.k * (0.85 + this.mood.energy * 0.3);
+    if (n === 'run') return RUN_SPEED * this.k;
     return 0;
   }
 
@@ -813,7 +1175,7 @@ export class PetController {
 
   // ───────────────────────── rysowanie ─────────────────────────
 
-  private render(now: number) {
+  private render(now: number, dt: number) {
     const el = this.els.pet;
     el.style.transform = `translate3d(${(this.cx - this.W / 2).toFixed(1)}px, ${(this.cy - this.H / 2).toFixed(1)}px, 0) rotate(${this.angle.toFixed(2)}deg)`;
     if (!this.shown) {
@@ -821,43 +1183,90 @@ export class PetController {
       this.shown = true;
     }
 
-    // oczy: patrzą na kursor, w kierunku marszu albo rozglądają się
+    // oczy i obrót 3D: patrzą na to, co ciekawe – kursor, kliknięty element, kierunek marszu
     const grounded = this.mode.kind === 'ground';
-    const moving = grounded && this.moveSpeed(now) > 0;
+    const moving = grounded && this.speedNow > 5;
+    const act = this.action.name;
     let lx = moving ? this.dir * 2.6 : 0;
     let ly = 0;
-    const act = this.action.name;
-    if (grounded && act === 'look') {
+    let yawTarget = moving ? this.dir * (act === 'run' ? 78 : 62) : 0;
+    const focus = this.attention && now < this.attention.until ? this.attention : this.pointer;
+    if (this.mode.kind === 'drag') {
+      yawTarget = Math.sin(now / 320) * 25;
+    } else if (this.mode.kind === 'air') {
+      const m = this.mode;
+      yawTarget = m.spin ? this.yaw : Math.abs(m.vx) > 60 ? Math.sign(m.vx) * 40 : 0;
+    } else if (act === 'turnback') {
+      yawTarget = this.yaw >= 0 ? 180 : -180;
+    } else if (act === 'look') {
       lx = Math.sin(now / 700) * 3.2;
       ly = Math.cos(now / 1100) * 1.2 - 0.5;
-    } else if (grounded && (act === 'typing' || act === 'watch')) {
-      lx = -1.5;
-      ly = 2;
-    } else if (this.pointer && this.mode.kind !== 'drag') {
-      const dx = this.pointer.x - this.cx;
-      const dy = this.pointer.y - this.cy;
+      yawTarget = Math.sin(now / 900) * 45;
+    } else if (act === 'typing' || act === 'watch' || act === 'hack') {
+      ly = 2.5;
+    } else if (act === 'fish') {
+      lx = 3;
+      ly = 3;
+      yawTarget = 28;
+    } else if (act === 'coffee') {
+      yawTarget = 14;
+    } else if (act === 'cool') {
+      yawTarget = -22;
+    } else if (focus && !moving) {
+      const dx = focus.x - this.cx;
+      const dy = focus.y - this.cy;
       const d = Math.hypot(dx, dy);
-      if (d > 1 && d < 360) {
+      if (d > 1 && d < 460) {
         const a = (this.angle * Math.PI) / 180;
         const ldx = dx * Math.cos(a) + dy * Math.sin(a);
         const ldy = -dx * Math.sin(a) + dy * Math.cos(a);
         const f = Math.min(1, d / 80);
         lx = (ldx / d) * 3.4 * f;
         ly = (ldy / d) * 2.6 * f;
+        yawTarget = clamp(ldx / 5, -42, 42);
       }
     }
-    const lean = moving ? (act === 'run' ? 9 : 3) * this.dir : 0;
-    const key = `${lx.toFixed(1)}|${ly.toFixed(1)}|${this.dir}|${lean}`;
+
+    // sprężyna – obrót zawsze płynny; piruet nadpisuje sprężynę
+    if (this.spin) {
+      const p = (now - this.spin.start) / 900;
+      if (p >= 1) {
+        this.yaw = this.spin.from;
+        this.spin = null;
+      } else {
+        const e = p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2;
+        this.yaw = this.spin.from + this.spin.sign * 360 * e;
+      }
+      this.yawVel = 0;
+    } else {
+      const k = 62;
+      this.yawVel += ((yawTarget - this.yaw) * k - this.yawVel * 2 * Math.sqrt(k) * 0.92) * dt;
+      this.yaw += this.yawVel * dt;
+      if (this.yaw > 200) this.yaw -= 360;
+      else if (this.yaw < -200) this.yaw += 360;
+    }
+    const yr = (this.yaw * Math.PI) / 180;
+    const yc = Math.cos(yr);
+    const ys = Math.sin(yr);
+
+    const lean = moving ? (act === 'run' ? 9 : 3) * this.dir * Math.min(1, this.speedNow / (WALK_SPEED * this.k)) : 0;
+    const key = `${lx.toFixed(1)}|${ly.toFixed(1)}|${this.dir}|${lean.toFixed(1)}|${yc.toFixed(3)}|${ys.toFixed(3)}`;
     if (key !== this.styleKey) {
       this.styleKey = key;
-      el.style.setProperty('--lx', lx.toFixed(1));
-      el.style.setProperty('--ly', ly.toFixed(1));
-      el.style.setProperty('--dir', String(this.dir));
-      el.style.setProperty('--lean', String(lean));
+      const st = el.style;
+      st.setProperty('--lx', lx.toFixed(1));
+      st.setProperty('--ly', ly.toFixed(1));
+      st.setProperty('--dir', String(this.dir));
+      st.setProperty('--lean', lean.toFixed(1));
+      st.setProperty('--yc', yc.toFixed(3));
+      st.setProperty('--ys', ys.toFixed(3));
+      st.setProperty('--yac', Math.abs(yc).toFixed(3));
+      st.setProperty('--yas', Math.abs(ys).toFixed(3));
+      st.setProperty('--ysg', yc < 0 ? '-1' : '1');
     }
 
     const v = this.computeVisual(now);
-    if (v.state !== this.visual.state || v.expression !== this.visual.expression) {
+    if (v.state !== this.visual.state || v.expression !== this.visual.expression || v.prop !== this.visual.prop) {
       this.visual = v;
       this.onVisual(v);
     }
@@ -867,42 +1276,56 @@ export class PetController {
   private computeVisual(now: number): PetVisual {
     const ov = this.override && now < this.override.until ? this.override : null;
     const m = this.mode;
-    if (m.kind === 'drag') return { state: 'drag', expression: ov?.expression ?? (now - m.since > 2500 ? 'annoyed' : 'surprised') };
+    const v = (state: PetState, expression: PetExpression, prop: PetProp | null = null): PetVisual => ({ state, expression, prop });
+    if (m.kind === 'drag') return v('drag', ov?.expression ?? (now - m.since > 2500 ? 'annoyed' : 'surprised'));
     if (m.kind === 'air') {
-      return {
-        state: m.vy < -60 ? 'jump' : 'fall',
-        expression: ov?.expression ?? (m.target ? 'happy' : m.vy > 900 ? 'surprised' : 'curious'),
-      };
+      if (now < m.hangUntil) return v('oops', now > m.hangUntil - 400 ? 'shocked' : 'surprised');
+      if (m.spin) return v('fall', 'dizzy');
+      return v(m.vy < -60 ? 'jump' : 'fall', ov?.expression ?? (m.target ? 'happy' : m.vy > 900 ? 'surprised' : 'curious'));
     }
-    if (this.launch) return { state: 'crouch', expression: ov?.expression ?? 'happy' };
+    if (this.trip) return v('trip', 'shocked');
+    if (this.launch) return v('crouch', ov?.expression ?? 'happy');
     if (this.impact && now < this.impact.until) {
       const st = this.impact.state;
-      return { state: st, expression: st === 'splat' ? 'dizzy' : st === 'recover' ? 'annoyed' : (ov?.expression ?? 'neutral') };
+      return v(st, st === 'splat' ? 'dizzy' : st === 'recover' ? 'annoyed' : (ov?.expression ?? 'neutral'));
     }
-    if (ov) return { state: ov.state, expression: ov.expression };
+    if (ov) return v(ov.state, ov.expression);
     const hov = this.hovered;
-    switch (this.action.name) {
+    const a = this.action;
+    switch (a.name) {
       case 'walk':
-        return { state: 'walk', expression: hov ? 'happy' : 'neutral' };
+      case 'approach':
+        return v(this.speedNow > 5 ? 'walk' : 'idle', hov ? 'happy' : a.name === 'approach' ? 'curious' : 'neutral');
+      case 'turnback':
+        return v('look', 'curious');
       case 'run':
-        return { state: 'run', expression: 'happy' };
+        return v(this.speedNow > 5 ? 'run' : 'idle', 'excited');
       case 'sit':
-        return {
-          state: 'sit',
-          expression: hov ? 'happy' : now - this.lastActivity > this.opts.sleepAfterMs * 0.6 ? 'sleepy' : 'neutral',
-        };
+        return v('sit', hov ? 'happy' : now - this.lastActivity > this.opts.sleepAfterMs * 0.6 ? 'sleepy' : 'neutral');
       case 'look':
-        return { state: 'look', expression: 'curious' };
+        return v('look', 'curious');
       case 'sleep':
-        return { state: 'sleep', expression: 'asleep' };
+        return v('sleep', 'asleep');
       case 'wake':
-        return { state: 'wake', expression: 'sleepy' };
+        return v('wake', 'sleepy');
       case 'typing':
-        return { state: 'typing', expression: 'focused' };
+        return v('typing', 'focused');
       case 'watch':
-        return { state: 'sit', expression: 'curious' };
+        return v('sit', 'curious');
+      case 'coffee':
+        return v('coffee', 'content', 'coffee');
+      case 'hack':
+        return v('hack', 'hacker');
+      case 'cool':
+        return v('cool', 'happy');
+      case 'show':
+        return v('show', 'happy', a.prop ?? null);
+      case 'fish': {
+        const t = (now - a.start) / FISH_MS;
+        return v('fish', t < 0.6 ? 'curious' : t < 0.72 ? 'shocked' : 'excited');
+      }
       default:
-        return { state: 'idle', expression: hov ? 'happy' : 'neutral' };
+        return v('idle', hov ? 'happy' : 'neutral');
     }
   }
 
@@ -929,6 +1352,93 @@ export class PetController {
     this.els.bubble.classList.remove('is-visible');
   }
 
+  /** Mówi, ale nie częściej niż raz na `gap` ms dla danej kategorii. */
+  private sayOnce(key: keyof typeof LINES, now: number, gap = 5000) {
+    if (now - (this.saidAt.get(key) ?? -1e9) < gap) return;
+    this.saidAt.set(key, now);
+    this.say(pick(LINES[key]));
+  }
+
+  // ───────────────────────── dotyk ─────────────────────────
+
+  /** Która część ciała jest pod kursorem (w układzie grafiki 160×190). */
+  private zoneAt(px: number, py: number): Zone | null {
+    const a = (this.angle * Math.PI) / 180;
+    const dx = px - this.cx;
+    const dy = py - this.cy;
+    const ux = VIEW_W / 2 + ((dx * Math.cos(a) + dy * Math.sin(a)) * VIEW_W) / this.W;
+    const uy = VIEW_H / 2 + ((-dx * Math.sin(a) + dy * Math.cos(a)) * VIEW_H) / this.H;
+    if (ux < 0 || ux > VIEW_W || uy < 0 || uy > VIEW_H) return null;
+    const hx = (ux - 80) / 58;
+    const hy = (uy - 100) / 43;
+    if (hx * hx + hy * hy <= 1) return 'head';
+    if (uy < 82) {
+      if (ux > 8 && ux < 70) return 'ear-l';
+      if (ux > 90 && ux < 152) return 'ear-r';
+      return null;
+    }
+    if (uy >= 166 && Math.abs(ux - 80) < 36) return 'feet';
+    if (uy >= 124 && Math.abs(ux - 80) < 36) return 'belly';
+    return null;
+  }
+
+  /** Ruch kursora po maskotce: głaskanie główki, łaskotanie brzuszka i stóp, dotykanie uszu. */
+  private feel(px: number, py: number, now: number) {
+    if (!this.opts.feelTouch || this.mode.kind === 'drag' || this.press) return;
+    const t = this.touch;
+    const z = this.zoneAt(px, py);
+    if (!z) {
+      if (t.zone) t.leftAt = now;
+      t.zone = null;
+      t.dist = 0;
+      return;
+    }
+    const busy =
+      this.mode.kind !== 'ground' || !!this.launch || !!this.trip || !!this.impact || this.action.name === 'fish' || this.action.name === 'sleep';
+    const moved = t.zone ? Math.hypot(px - t.x, py - t.y) : 0;
+    t.x = px;
+    t.y = py;
+    if (z !== t.zone) {
+      const fresh = !t.zone && now - t.leftAt > 1500;
+      t.zone = z;
+      t.dist = 0;
+      if (busy) return;
+      if (z === 'ear-l' || z === 'ear-r') {
+        this.touchReact(z === 'ear-l' ? 'twitch-l' : 'twitch-r', 'annoyed', 650, now);
+        this.sayOnce('ear', now, 6000);
+      } else if (fresh) {
+        this.touchReact('flinch', 'surprised', 450, now);
+      }
+      return;
+    }
+    t.dist += moved;
+    if (busy) return;
+    if (z === 'head' && t.dist > 200) {
+      t.dist = 0;
+      this.touchReact('petted', 'happy', 1600, now);
+      this.feelGood({ social: 0.12, fun: 0.04 });
+      this.sayOnce('pet', now, 7000);
+    } else if (z === 'belly' && t.dist > 130) {
+      t.dist = 0;
+      this.touchReact('giggle', 'excited', 1300, now);
+      this.feelGood({ social: 0.08, fun: 0.08 });
+      this.sayOnce('belly', now, 6000);
+    } else if (z === 'feet' && t.dist > 110) {
+      t.dist = 0;
+      this.touchReact('giggle', 'excited', 1000, now);
+      this.sayOnce('feet', now, 6000);
+    }
+  }
+
+  private touchReact(state: PetState, expression: PetExpression, ms: number, now: number) {
+    if (this.override && now < this.override.until && this.override.state === state) {
+      this.override.until = now + ms;
+      return;
+    }
+    this.endActivity(now);
+    this.override = { state, expression, until: now + ms };
+  }
+
   // ───────────────────────── zdarzenia ─────────────────────────
 
   private activity() {
@@ -939,9 +1449,68 @@ export class PetController {
   }
 
   private onWindowPointer = (e: PointerEvent) => {
+    const t = performance.now();
+    if (e.type === 'pointermove' && this.pointer) this.detectShake(e.clientX - this.pointer.x, e.clientX, e.clientY, t);
     this.pointer = { x: e.clientX, y: e.clientY };
     this.activity();
+    if (e.type === 'pointermove' && e.pointerType === 'mouse') this.feel(e.clientX, e.clientY, t);
   };
+
+  /** Szybkie machanie kursorem tuż przy maskotce = zawroty głowy. */
+  private detectShake(dx: number, x: number, y: number, t: number) {
+    // machanie tuż obok – nie po ciele (to są łaskotki / głaskanie)
+    if (Math.abs(dx) < 6 || Math.hypot(x - this.cx, y - this.cy) > this.H * 1.4 || this.zoneAt(x, y)) return;
+    const dirX = Math.sign(dx);
+    if (dirX !== Math.sign(this.lastPointerDx)) this.shakeFlips.push(t);
+    this.lastPointerDx = dx;
+    this.shakeFlips = this.shakeFlips.filter((f) => t - f < 1100);
+    if (this.shakeFlips.length >= 7 && this.mode.kind === 'ground' && !this.launch && !this.trip) {
+      this.shakeFlips = [];
+      this.endActivity(t);
+      this.override = { state: 'confused', expression: 'dizzy', until: t + 1600 };
+      this.sayOnce('dizzy', t, 6000);
+    }
+  }
+
+  /** Zaznaczenie tekstu: maskotka „czyta” na głos. */
+  private onMouseUp = (e: MouseEvent) => {
+    if (e.target instanceof Node && this.els.layer.contains(e.target)) return;
+    window.setTimeout(() => {
+      const sel = window.getSelection();
+      const text = sel?.toString().replace(/\s+/g, ' ').trim() ?? '';
+      if (text.length < 4 || text.length > 400 || !sel || sel.rangeCount === 0) return;
+      const r = sel.getRangeAt(0).getBoundingClientRect();
+      const t = performance.now();
+      this.attention = { x: r.left + r.width / 2, y: r.top + r.height / 2, until: t + 2500 };
+      this.feelGood({ curiosity: 0.2 });
+      if (t - (this.saidAt.get('read') ?? -1e9) > 8000) {
+        this.saidAt.set('read', t);
+        this.say(`Czytam: „${text.length > 42 ? `${text.slice(0, 42)}…` : text}” 🤓`);
+      }
+    }, 0);
+  };
+
+  private pageEvent(kind: 'copy' | 'paste') {
+    const t = performance.now();
+    this.feelGood({ curiosity: 0.1 });
+    this.sayOnce(kind, t, 5000);
+  }
+
+  private onVisibility() {
+    const t = performance.now();
+    if (document.hidden) {
+      this.hiddenAt = Date.now();
+      return;
+    }
+    if (this.hiddenAt && Date.now() - this.hiddenAt > 15000) {
+      this.wakeUp(t);
+      this.startSpin(t);
+      this.override = { state: 'happy', expression: 'happy', until: t + 1500 };
+      this.feelGood({ social: 0.2 });
+      this.say(pick(LINES.back));
+    }
+    this.hiddenAt = 0;
+  }
 
   private onKey = (e: KeyboardEvent) => {
     this.activity();
@@ -968,7 +1537,9 @@ export class PetController {
     this.workEl = t;
     this.workRetryAt = 0;
     this.ensureSurface(t);
-    this.wakeUp(performance.now());
+    const now = performance.now();
+    this.wakeUp(now);
+    this.endActivity(now);
   };
 
   private onFocusOut = (e: FocusEvent) => {
@@ -979,13 +1550,45 @@ export class PetController {
 
   private onClick = (e: MouseEvent) => {
     if (!(e.target instanceof Element) || this.els.layer.contains(e.target)) return;
-    const t = e.target.closest<HTMLElement>('[data-pet-say], [data-pet-react]');
-    if (!t) return;
+    const t = e.target.closest<HTMLElement>('[data-pet-say], [data-pet-react], [data-pet-prop], [data-pet-act]');
+    if (!t) {
+      this.noticeClick(e);
+      return;
+    }
     const reaction = t.dataset.petReact as PetReaction | undefined;
     const text = t.dataset.petSay;
-    if (reaction && reaction in REACTIONS) this.react(reaction, text);
+    const prop = t.dataset.petProp as PetProp | undefined;
+    const activity = t.dataset.petAct as PetActivity | undefined;
+    if (prop && PET_PROPS.includes(prop)) {
+      this.recentProps = [prop, ...this.recentProps.filter((p) => p !== prop)].slice(0, 4);
+      this.act('show', prop, text);
+    }
+    else if (activity && ACTIVITIES.includes(activity)) this.act(activity, undefined, text);
+    else if (reaction && reaction in REACTIONS) this.react(reaction, text);
     else if (text) this.say(text);
   };
+
+  /** Zwykłe kliknięcie w panelu: maskotka patrzy, komentuje i zapamiętuje marki, o których była mowa. */
+  private noticeClick(e: MouseEvent) {
+    const target = e.target instanceof Element ? e.target.closest<HTMLElement>('button, a, [role="button"], summary, label') : null;
+    const t = performance.now();
+    this.attention = { x: e.clientX, y: e.clientY, until: t + 1600 };
+    this.feelGood({ curiosity: 0.12, social: 0.03 });
+    if (!target) return;
+    const label = (target.getAttribute('aria-label') || target.textContent || '').replace(/\s+/g, ' ').trim();
+    const brand = BRAND_WORDS.find(([re]) => re.test(label))?.[1];
+    if (brand) {
+      this.recentProps = [brand, ...this.recentProps.filter((p) => p !== brand)].slice(0, 4);
+      if (Math.random() < 0.45 && this.mode.kind === 'ground' && !this.isActivity()) {
+        window.setTimeout(() => this.act('show', brand), 500);
+        return;
+      }
+    }
+    if (label && label.length <= 28 && Math.random() < 0.2 && t - (this.saidAt.get('click') ?? -1e9) > 9000) {
+      this.saidAt.set('click', t);
+      this.say(pick([`Klik w „${label}” 👀`, `O, „${label}”!`, `Co robi „${label}”? 🤔`]));
+    }
+  }
 
   private onError = (e: ErrorEvent) => {
     if (!this.opts.reactToErrors) return;
@@ -1014,6 +1617,9 @@ export class PetController {
       case 'goTo':
         this.goTo(cmd.target, cmd.text);
         break;
+      case 'act':
+        this.act(cmd.activity, cmd.prop, cmd.text, cmd.ms);
+        break;
       case 'jump': {
         this.wakeUp(now);
         const t = this.pickTarget();
@@ -1024,6 +1630,7 @@ export class PetController {
         this.forcedSleep = true;
         this.lastActivity = -1e9;
         this.override = null;
+        this.endActivity(now);
         if (this.mode.kind === 'ground' && !this.isUpright()) this.drop();
         break;
       case 'wake':
@@ -1080,7 +1687,10 @@ export class PetController {
     this.lastActivity = now;
     this.launch = null;
     this.impact = null;
+    this.trip = null;
+    this.tripAtEdge = false;
     this.pendingGoto = null;
+    this.override = null;
     this.setAction('idle', now + 1000);
     this.mode = {
       kind: 'drag',
@@ -1106,7 +1716,7 @@ export class PetController {
     }
     const now = performance.now();
     if (!p.dragging) {
-      if (!cancelled) this.poke(now);
+      if (!cancelled) this.poke(now, e.clientX, e.clientY);
       return;
     }
     const m = this.mode;
@@ -1114,14 +1724,15 @@ export class PetController {
     const stale = cancelled || now - m.lastT > 90;
     const vx = stale ? 0 : clamp(m.vx, -2400, 2400);
     const vy = stale ? 0 : clamp(m.vy, -2400, 2400);
-    this.mode = { kind: 'air', vx, vy, target: null, ignore: null, t: 0, tLand: 0 };
+    this.mode = this.air(vx, vy);
     if (Math.hypot(vx, vy) > 1300) this.say(pick(LINES.thrown));
   }
 
   private onPetUp = (e: PointerEvent) => this.endPress(e, false);
   private onPetCancel = (e: PointerEvent) => this.endPress(e, true);
 
-  private poke(now: number) {
+  /** Kliknięcie w maskotkę – reakcja zależy od miejsca. */
+  private poke(now: number, px: number, py: number) {
     this.lastActivity = now;
     this.pokes = this.pokes.filter((t) => now - t < 2500);
     this.pokes.push(now);
@@ -1138,16 +1749,29 @@ export class PetController {
       return;
     }
     const m = this.mode;
-    if (m.kind !== 'ground' || this.launch) return;
-    if (this.isUpright()) {
+    if (m.kind !== 'ground' || this.launch || this.trip) return;
+    if (!this.isUpright()) {
+      this.drop(true);
+      this.say('Aaa! 😱');
+      return;
+    }
+    this.endActivity(now);
+    const zone = this.zoneAt(px, py);
+    if (zone === 'head') {
+      this.override = { state: 'bonk', expression: 'dizzy', until: now + 900 };
+      this.say(pick(LINES.head));
+    } else if (zone === 'ear-l' || zone === 'ear-r') {
+      this.override = { state: zone === 'ear-l' ? 'twitch-l' : 'twitch-r', expression: 'annoyed', until: now + 700 };
+      this.say(pick(LINES.ear));
+    } else if (zone === 'belly') {
+      this.override = { state: 'giggle', expression: 'excited', until: now + 1300 };
+      this.say(pick(LINES.belly));
+    } else {
       const vy = -560 * Math.sqrt(this.k);
       this.override = null;
       this.impact = null;
-      this.mode = { kind: 'air', vx: 0, vy, target: m.surface, ignore: null, t: 0, tLand: (-2 * vy) / GRAVITY };
-      this.say(pick(LINES.poke));
-    } else {
-      this.drop(true);
-      this.say('Aaa! 😱');
+      this.mode = this.air(0, vy, { target: m.surface, tLand: (-2 * vy) / GRAVITY });
+      this.say(zone === 'feet' ? pick(LINES.feet) : pick(LINES.poke));
     }
   }
 }

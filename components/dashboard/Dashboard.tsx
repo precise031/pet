@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { PetSvg, pet } from '@/components/pet';
+import { FloatingWindow, type WindowState } from './FloatingWindow';
 import { Gallery } from './Gallery';
 import { Icon, type IconName } from './Icon';
 import { PetControls } from './PetControls';
@@ -59,18 +60,50 @@ function Sparkline({ data, good }: { data: number[]; good: boolean }) {
 }
 
 export function Dashboard() {
-  const [windowOpen, setWindowOpen] = useState(false);
+  const [windows, setWindows] = useState<WindowState[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const toastId = useRef(0);
+  const winId = useRef(0);
 
   useEffect(() => {
-    if (!windowOpen) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setWindowOpen(false);
+    if (!windows.length) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setWindows((w) => w.slice(0, -1));
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [windowOpen]);
+  }, [windows.length]);
+
+  const openWindow = () => {
+    const id = ++winId.current;
+    const n = windows.length;
+    const w = Math.min(420, window.innerWidth - 32);
+    const x = Math.max(16, Math.min(window.innerWidth - w - 16, window.innerWidth * 0.3 + n * 70));
+    const y = Math.min(window.innerHeight - 260, 170 + n * 90);
+    setWindows((ws) => [...ws, { id, title: `Okno #${id}`, x, y, w, attract: 'Ooo, nowe okienko! 👀' }]);
+  };
+
+  /** Dwa okna jedno nad drugim: maskotka wskakuje na górne, potyka się i leci na dolne. */
+  const openTwoWindows = () => {
+    const a = ++winId.current;
+    const b = ++winId.current;
+    const w = Math.min(380, window.innerWidth - 32);
+    const x = Math.max(16, window.innerWidth * 0.5 - w / 2);
+    const y = Math.max(150, Math.min(window.innerHeight - 520, window.innerHeight * 0.36));
+    setWindows([
+      { id: a, title: 'Górne okno', x, y, w, attract: 'Wchodzę na górne okno! 🧗' },
+      { id: b, title: 'Dolne okno', x: Math.max(8, x - 150), y: Math.min(window.innerHeight - 230, y + 250), w: Math.min(w + 300, window.innerWidth - 16) },
+    ]);
+    window.setTimeout(() => pet.trip(), 2400);
+  };
+
+  const moveWindow = (id: number, x: number, y: number) => setWindows((ws) => ws.map((w) => (w.id === id ? { ...w, x, y } : w)));
+  const focusWindow = (id: number) =>
+    setWindows((ws) => {
+      const i = ws.findIndex((w) => w.id === id);
+      return i < 0 || i === ws.length - 1 ? ws : [...ws.slice(0, i), ...ws.slice(i + 1), ws[i]];
+    });
+  const closeWindow = (id: number) => setWindows((ws) => ws.filter((w) => w.id !== id));
 
   const pushToast = () => {
     const id = ++toastId.current;
@@ -125,7 +158,7 @@ export function Dashboard() {
           <button type="button" className="btn" onClick={pushToast}>
             <Icon name="bell" /> Powiadomienie
           </button>
-          <button type="button" className="btn btn-primary" onClick={() => setWindowOpen(true)}>
+          <button type="button" className="btn btn-primary" onClick={openWindow}>
             <Icon name="window" /> Nowe okno
           </button>
         </header>
@@ -142,7 +175,7 @@ export function Dashboard() {
         </section>
 
         <div className="grid">
-          <PetControls onOpenWindow={() => setWindowOpen(true)} />
+          <PetControls onOpenWindow={openWindow} onTwoWindows={openTwoWindows} />
 
           <form id="note-card" className="card" data-pet-surface="perimeter" onSubmit={saveNote}>
             <header className="card-head">
@@ -226,8 +259,17 @@ export function Dashboard() {
               <button type="button" className="btn" onClick={() => pet.react('error', 'API zwróciło 500 😵')}>
                 Symuluj błąd API
               </button>
-              <button type="button" className="btn" data-pet-react="success" data-pet-say="Wysłane do kuriera! 🚚">
-                Wyślij paczkę
+              <button type="button" className="btn" data-pet-prop="allegro" data-pet-say="Paczka z Allegro nadana! 📦">
+                Nadaj paczkę Allegro
+              </button>
+              <button type="button" className="btn" data-pet-prop="blik" data-pet-say="Zapłacone BLIKIEM 📲">
+                Zapłać BLIKIEM
+              </button>
+              <button type="button" className="btn" data-pet-prop="olx">
+                Wystaw na OLX
+              </button>
+              <button type="button" className="btn" data-pet-act="fish">
+                Idź na ryby 🎣
               </button>
               <button type="button" className="btn" onClick={pushToast}>
                 Pokaż powiadomienie
@@ -263,49 +305,29 @@ export function Dashboard() {
         ))}
       </div>
 
-      {windowOpen && (
-        <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && setWindowOpen(false)}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="window-title"
-            className="window"
-            data-pet-surface="perimeter"
-            data-pet-attract="Ooo, nowe okienko! 👀"
-          >
-            <div className="window-bar">
-              <span className="traffic" aria-hidden="true">
-                <i />
-                <i />
-                <i />
-              </span>
-              <strong id="window-title">Nowe okno</strong>
-              <button type="button" className="icon-btn" aria-label="Zamknij" onClick={() => setWindowOpen(false)}>
-                ✕
-              </button>
-            </div>
-            <div className="window-body">
-              <p>To jest okienko. Maskotka wskoczy na nie i będzie chodzić po jego krawędziach – także po bokach i do góry nogami pod spodem.</p>
-              <p className="muted">Zamknij je, kiedy maskotka na nim stoi – spadnie 🙃</p>
-            </div>
-            <div className="window-foot">
-              <button type="button" className="btn" onClick={() => setWindowOpen(false)}>
-                Anuluj
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => {
-                  pet.react('success', 'Zatwierdzone! ✅');
-                  setWindowOpen(false);
-                }}
-              >
-                OK
-              </button>
-            </div>
+      {windows.map((w, i) => (
+        <FloatingWindow key={w.id} win={w} z={i} onMove={moveWindow} onFocus={focusWindow} onClose={closeWindow}>
+          <div className="window-body">
+            <p>Przeciągnij okno za pasek – maskotka pojedzie razem z nim. Chodzi po wszystkich krawędziach: po bokach i do góry nogami pod spodem.</p>
+            <p className="muted">Zamknij je, kiedy maskotka na nim stoi – spadnie 🙃</p>
           </div>
-        </div>
-      )}
+          <div className="window-foot">
+            <button type="button" className="btn" onClick={() => closeWindow(w.id)}>
+              Zamknij
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                pet.react('success', 'Zatwierdzone! ✅');
+                closeWindow(w.id);
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </FloatingWindow>
+      ))}
     </div>
   );
 }

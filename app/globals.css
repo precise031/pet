@@ -436,7 +436,7 @@ textarea {
 
 .preview-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 10px;
 }
 
@@ -453,8 +453,26 @@ textarea {
 }
 
 .preview .pet-preview {
-  width: 50px;
-  height: 60px;
+  width: 64px;
+  height: 76px;
+}
+
+.preview-btn {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.preview-btn:hover {
+  border-color: rgb(182 255 56 / 0.5);
+  background: #14141a;
+}
+
+.preview-label {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
 }
 
 .preview figcaption {
@@ -576,6 +594,42 @@ textarea {
   background: var(--panel-2);
   box-shadow: 0 30px 80px rgb(0 0 0 / 0.6), 0 0 40px rgb(155 92 255 / 0.15);
   animation: window-in 0.22s ease-out;
+}
+
+.window.floating {
+  position: fixed;
+  animation: window-in 0.22s ease-out;
+}
+
+.window.floating .window-bar {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.window.floating .window-bar:active {
+  cursor: grabbing;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 5px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  background: #121216;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: rgb(182 255 56 / 0.55);
+  color: var(--green);
 }
 
 .window-bar {

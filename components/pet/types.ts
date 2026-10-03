@@ -14,12 +14,25 @@ export type PetState =
   | 'splat'
   | 'recover'
   | 'drag'
+  | 'trip'
+  | 'oops'
   | 'typing'
+  | 'hack'
+  | 'coffee'
+  | 'fish'
+  | 'show'
+  | 'cool'
   | 'success'
   | 'error'
   | 'confused'
   | 'happy'
-  | 'sad';
+  | 'sad'
+  | 'petted'
+  | 'giggle'
+  | 'twitch-l'
+  | 'twitch-r'
+  | 'bonk'
+  | 'flinch';
 
 /** Mina (oczy + buzia). */
 export type PetExpression =
@@ -30,11 +43,41 @@ export type PetExpression =
   | 'confused'
   | 'annoyed'
   | 'surprised'
+  | 'shocked'
   | 'sleepy'
   | 'asleep'
   | 'dizzy'
   | 'angry'
-  | 'focused';
+  | 'hacker'
+  | 'focused'
+  | 'excited'
+  | 'content'
+  | 'love'
+  | 'wink';
+
+/** Rekwizyty, które maskotka może trzymać: pet.show('olx'). */
+export type PetProp =
+  | 'allegro'
+  | 'allegro-lokalnie'
+  | 'olx'
+  | 'vinted'
+  | 'alebilet'
+  | 'ticketmaster'
+  | 'booking'
+  | 'airbnb'
+  | 'cloudflare'
+  | 'blik'
+  | 'database'
+  | 'terminal'
+  | 'globe'
+  | 'gear'
+  | 'bug'
+  | 'box'
+  | 'heart'
+  | 'coffee';
+
+/** Czynności, które można zlecić: pet.act('fish'). */
+export type PetActivity = 'coffee' | 'hack' | 'fish' | 'cool' | 'trip' | 'show';
 
 /** Reakcje, które można wywołać z kodu: pet.react('success'). */
 export type PetReaction = 'success' | 'error' | 'confused' | 'happy' | 'sad';
@@ -48,6 +91,10 @@ export interface PetOptions {
   reactToTyping: boolean;
   /** Reaguj na błędy JS na stronie (window error / unhandledrejection). */
   reactToErrors: boolean;
+  /** Reaguj na dotyk kursora (głaskanie, łaskotanie, uszy). */
+  feelTouch: boolean;
+  /** Sama z siebie pije kawę, łowi ryby, hakuje, pokazuje rekwizyty. */
+  hobbies: boolean;
   /** Po ilu ms bez aktywności użytkownika maskotka zasypia. */
   sleepAfterMs: number;
   /** Pokazuj dymki z tekstem. */
@@ -57,6 +104,7 @@ export interface PetOptions {
 export interface PetVisual {
   state: PetState;
   expression: PetExpression;
+  prop: PetProp | null;
 }
 
 export type PetTarget = Element | string;
@@ -65,6 +113,7 @@ export type PetCommand =
   | { type: 'say'; text: string; ms?: number }
   | { type: 'react'; reaction: PetReaction; text?: string }
   | { type: 'goTo'; target: PetTarget; text?: string }
+  | { type: 'act'; activity: PetActivity; prop?: PetProp; text?: string; ms?: number }
   | { type: 'jump' }
   | { type: 'sleep' }
   | { type: 'wake' }
@@ -74,8 +123,29 @@ export type PetCommand =
 /** Nazwa zdarzenia na window, przez które cała strona rozmawia z maskotką. */
 export const PET_EVENT = 'pet:command';
 
+export const PET_PROPS: readonly PetProp[] = [
+  'allegro',
+  'allegro-lokalnie',
+  'olx',
+  'vinted',
+  'alebilet',
+  'ticketmaster',
+  'booking',
+  'airbnb',
+  'cloudflare',
+  'blik',
+  'database',
+  'terminal',
+  'globe',
+  'gear',
+  'bug',
+  'box',
+  'heart',
+  'coffee',
+];
+
 export const DEFAULT_PET_OPTIONS: PetOptions = {
-  size: 72,
+  size: 104,
   surfaceSelector: [
     '[data-pet-surface]',
     'button',
@@ -87,6 +157,8 @@ export const DEFAULT_PET_OPTIONS: PetOptions = {
   ].join(', '),
   reactToTyping: true,
   reactToErrors: true,
+  feelTouch: true,
+  hobbies: true,
   sleepAfterMs: 45_000,
   speech: true,
 };

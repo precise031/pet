@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { PetController } from './engine';
-import { PetSvg } from './PetSvg';
+import { PET_VIEW, PetSvg } from './PetSvg';
 import { DEFAULT_PET_OPTIONS, PET_EVENT, type PetCommand, type PetOptions, type PetVisual } from './types';
 import './pet.css';
 
@@ -45,7 +45,7 @@ function PetRuntime({ options }: { options: PetOptions }) {
   const bubbleRef = useRef<HTMLDivElement>(null);
   const controllerRef = useRef<PetController | null>(null);
   const initialOptions = useRef(options);
-  const [visual, setVisual] = useState<PetVisual>({ state: 'fall', expression: 'surprised' });
+  const [visual, setVisual] = useState<PetVisual>({ state: 'fall', expression: 'surprised', prop: null });
 
   useEffect(() => {
     const layer = layerRef.current;
@@ -67,12 +67,12 @@ function PetRuntime({ options }: { options: PetOptions }) {
   }, [optionsKey]);
 
   const height = options.size;
-  const width = (options.size * 100) / 120;
+  const width = (options.size * PET_VIEW.w) / PET_VIEW.h;
 
   return (
     <div ref={layerRef} className="pet-layer" aria-hidden="true">
       <div ref={petRef} className="pet" data-pet-state={visual.state} style={{ width, height }}>
-        <PetSvg state={visual.state} expression={visual.expression} />
+        <PetSvg state={visual.state} expression={visual.expression} prop={visual.prop} />
       </div>
       <div ref={bubbleRef} className="pet-bubble" />
     </div>
